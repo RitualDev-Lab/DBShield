@@ -136,7 +136,12 @@ npx @ritualdev-lab/dbshield init
   - Boolean & constant tautology bypass detection (`1=1`, `WHERE true`, `OR 1=1`)
   - Multi-statement injection defense & safety tier scoring (`STRICT`, `BALANCED`, `PERMISSIVE`)
   - First-class `db_query` MCP tool with automated guardrail interception
-- [ ] **Phase 3: Dry-Run Sandbox & Auto-Rollback Transaction Engine**
+- [x] **Phase 3: Dry-Run Sandbox & Auto-Rollback Transaction Engine**
+  - Atomic transaction rollback sandbox (`BEGIN ... ROLLBACK`) with zero database mutation side-effects
+  - Row-level blast radius estimation and `maxRowsPerMutation` threshold enforcement
+  - Cryptographically signed HMAC-SHA256 two-phase commit tokens (`CommitTokenManager`)
+  - Query hash tamper-proofing, short-lived TTLs, and replay attack prevention
+  - First-class `db_dry_run` and `db_commit` MCP tools
 - [ ] **Phase 4: Real-Time Dynamic PII Masking & Data Redaction**
 - [ ] **Phase 5: Full MCP Tool Suite & Cursor/Claude Auto-Configurator**
 - [ ] **Phase 6: Comprehensive Testing, CI/CD & npm Release**

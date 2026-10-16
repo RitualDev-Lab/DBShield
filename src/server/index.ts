@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createDatabaseAdapter } from "../adapters/index.js";
 import { loadConfig } from "../config/index.js";
 import { SqlGuardEngine } from "../guard/index.js";
+import { SandboxEngine } from "../sandbox/index.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
 
 export interface McpServerInstance {
@@ -11,6 +12,7 @@ export interface McpServerInstance {
   adapter: DatabaseAdapter;
   config: DBShieldConfig;
   guardEngine: SqlGuardEngine;
+  sandboxEngine: SandboxEngine;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -25,6 +27,7 @@ export async function createMcpServer(
   await adapter.connect();
 
   const guardEngine = new SqlGuardEngine(config);
+  const sandboxEngine = new SandboxEngine(adapter, guardEngine, config);
 
   const server = new McpServer({
     name: "dbshield",
@@ -221,11 +224,133 @@ export async function createMcpServer(
     },
   );
 
+  // Dry-Run Sandbox Tool
+  server.tool(
+    "db_dry_run",
+    "Simulate a database mutation inside an auto-rollback transaction sandbox. Calculates blast radius, affected row count, and returns a short-lived authorization token if safe.",
+    {
+      sql: z.string().describe("The SQL mutation (UPDATE, INSERT, DELETE) to simulate."),
+      params: z
+        .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+        .optional()
+        .describe("Optional parameterized query values."),
+    },
+    async ({ sql, params }) => {
+      const dryRunRes = await sandboxEngine.dryRun(sql, params);
+
+      if (!dryRunRes.safe) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "DRY_RUN_REJECTED",
+                  safe: false,
+                  simulatedAffectedRows: dryRunRes.simulatedAffectedRows,
+                  targetTables: dryRunRes.targetTables,
+                  warnings: dryRunRes.warnings,
+                  instruction:
+                    "This mutation was rejected during dry-run simulation or violated security thresholds.",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "DRY_RUN_APPROVED",
+                safe: true,
+                simulatedAffectedRows: dryRunRes.simulatedAffectedRows,
+                targetTables: dryRunRes.targetTables,
+                rollbackVerified: dryRunRes.rollbackVerified,
+                executionTimeMs: dryRunRes.executionTimeMs,
+                commitToken: dryRunRes.commitToken,
+                expiresAt: dryRunRes.expiresAt,
+                warnings: dryRunRes.warnings,
+                instruction:
+                  "To apply these changes permanently to the database, call 'db_commit' with this commitToken and the identical SQL query within 60 seconds.",
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  // Commit Verified Mutation Tool
+  server.tool(
+    "db_commit",
+    "Permanently execute and commit a mutation previously authorized by 'db_dry_run'. Requires a valid, single-use commitToken.",
+    {
+      commitToken: z
+        .string()
+        .describe("The single-use authorization token obtained from 'db_dry_run'."),
+      sql: z.string().describe("The exact SQL query that was dry-run and authorized."),
+      params: z
+        .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+        .optional()
+        .describe("Optional parameterized query values."),
+    },
+    async ({ commitToken, sql, params }) => {
+      try {
+        const result = await sandboxEngine.commit(commitToken, sql, params);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "COMMITTED",
+                  message: "Transaction successfully committed to the database.",
+                  rowCount: result.rowCount,
+                  executionTimeMs: result.executionTimeMs,
+                  auditId: result.auditId,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "COMMIT_FAILED",
+                  error: (err as Error).message,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+    },
+  );
+
   return {
     server,
     adapter,
     config,
     guardEngine,
+    sandboxEngine,
     async start() {
       const transport = new StdioServerTransport();
       await server.connect(transport);
