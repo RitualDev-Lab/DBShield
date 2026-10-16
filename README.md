@@ -119,6 +119,79 @@ npx @ritualdev-lab/dbshield init
 
 ---
 
+## 🛡️ Matrix of Supported SQL & Enforced Guarantees
+
+DBShield enforces rigorous runtime guarantees across the SQL lifecycle. Guarantees are verified transactionally, ensuring mutations never exceed approved scope even if database state drifts:
+
+| SQL Operation | Classification Mechanism | Static AST Guardrail | Execution Boundary & Rollback | Data Masking & Privacy |
+|---|---|---|---|---|
+| **SELECT** | Prepared-statement column reflection (`stmt.columns()`) | Detects missing `LIMIT` in STRICT tier; warns if limit exceeds server cap | Streaming iterator (`stmt.iterate()`) caps memory; truncates at `maxRowsPerRead` | Zero-leak dynamic PII masking on result rows |
+| **WITH ... (CTE)** | Prepared-statement column reflection & recursive AST analysis | Recursively extracts underlying mutated tables & verifies read safety | Streaming iterator (`stmt.iterate()`) with hard read ceiling | Zero-leak dynamic PII masking on result rows |
+| **UPDATE (Targeted)** | AST evaluation & tautology checker (`evaluateWhereClause`) | Blocks unconstrained updates, `WHERE 1=1`, `WHERE true`, tautological `OR` | Atomic transaction; rolls back if affected rows exceed `maxMutationRows` | Literal masking in logs & database errors |
+| **DELETE (Targeted)** | AST evaluation & tautology checker (`evaluateWhereClause`) | Blocks unconstrained deletes, `WHERE 1=1`, tautological `OR` | Atomic transaction; rolls back if affected rows exceed `maxMutationRows` | Literal masking in logs & database errors |
+| **INSERT** | AST evaluation & dialect parser | Pre-flight dry run simulation required under STRICT tier | Atomic transaction; rolls back if inserted rows exceed `maxMutationRows` | Redacts sensitive literals in `(cols) VALUES (vals)` |
+| **DROP TABLE / TRUNCATE** | AST statement opcode inspection | **CRITICAL BLOCK**: Intercepted before database touch unless explicitly overridden | Direct execution blocked | Audit log records blocked attempt with high risk score |
+| **ALTER TABLE DROP COLUMN** | AST expression visitor (`expr.action`) | **BLOCKED**: Intercepted before database touch to prevent schema data loss | Direct execution blocked | Audit log records blocked attempt |
+| **EXPLAIN / PRAGMA** | Prepared-statement column reflection | Safe read-only inspection | Read capped at `maxRowsPerRead` | Sanitized output |
+
+### Enforced Guarantees Breakdown
+
+1. **Parameter-Bound Commit Invariance (B1)**:
+   - Commit authorization tokens are cryptographically signed (HMAC-SHA256) binding the exact normalized SQL query text, typed parameters (`params`), database identity (`storagePath`), safety tier, and simulated affected row count.
+   - Any query tampering, bound parameter alteration, or cross-database replay attempt is instantly rejected (`PARAMS_MISMATCH`, `QUERY_TAMPERED`).
+2. **Hard Mutation Ceilings & Transactional Rollbacks (B2)**:
+   - Exceeding `maxRowsPerMutation` is a hard safety limit across **all safety tiers** (`STRICT`, `BALANCED`, `PERMISSIVE`), immediately refusing dry-run authorization (`EXCESSIVE_BLAST_RADIUS`).
+   - Mutations executed directly or committed through `db_commit` run inside an atomic transaction block: if actual row modifications exceed the authorized ceiling, DBShield immediately executes `ROLLBACK;` and aborts.
+3. **Simulation Delta Drift Prevention (B2)**:
+   - Protects against concurrent modifications between dry run and commit: if underlying database rows change such that actual affected rows differ from simulated rows (`simulatedAffectedRows != actualChanges`), DBShield rolls back the transaction with `[SIMULATION_DELTA_DRIFT]`.
+4. **Audit Log & Error Message Sanitization (B3)**:
+   - Raw SQL strings have sensitive literals (passwords, tokens, API keys, emails, phone numbers, SSNs, credit cards) masked before being written to disk or the in-memory circular buffer.
+   - Database engine errors (e.g., SQLite constraint failures) are sanitized prior to returning to the agent or storing in audit records.
+   - `db_audit_log` returns strictly sanitized compliance records.
+5. **Memory-Safe Streaming Read Row Capping (B4)**:
+   - SQLite row reads are streamed lazily using Node.js `stmt.iterate()`.
+   - Results are capped at `maxRowsPerRead` without buffering the full dataset into Node.js heap memory, returning agent-friendly pagination metadata (`totalReturned`, `isTruncated`, `maxAllowedRows`, `hasMore`, `warning`).
+6. **Robust Statement Classification & CTE Support (B5)**:
+   - Replaced naive string prefix checks with SQLite prepared-statement column metadata (`stmt.columns() > 0`) and recursive AST extraction.
+   - Complex CTEs (`WITH active AS (...) SELECT ...`) and leading single-line (`--`) or multi-line (`/* */`) comments are correctly classified and executed without error.
+
+---
+
+## 🔒 Production Deployment & Least-Privilege Guide
+
+For production and shared environments, DBShield should be paired with database-level least privilege:
+
+### 1. SQLite Filesystem Hardening
+- **File Permissions**: Restrict database file permissions so only the DBShield process UID has access:
+  ```bash
+  chmod 600 /var/data/production.db
+  chown dbshield:dbshield /var/data/production.db
+  ```
+- **Read-Only Connections**: For read-only agent workloads, mount SQLite with read-only flags or initialize with SQLite read-only mode:
+  ```json
+  {
+    "storagePath": "file:/var/data/production.db?mode=ro",
+    "safetyTier": "STRICT"
+  }
+  ```
+
+### 2. Relational Database Least Privilege (PostgreSQL / MySQL)
+- Create a dedicated database role for DBShield with minimal necessary grants:
+  ```sql
+  -- Create isolated role
+  CREATE ROLE agent_user WITH LOGIN PASSWORD 'strong_random_password';
+  
+  -- Grant only targeted DML on application tables (NO DROP, TRUNCATE, or ALTER)
+  GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO agent_user;
+  REVOKE ALL ON SCHEMA public FROM PUBLIC;
+  ```
+
+### 3. Policy Enforcement vs Human Approval
+- **Deterministic Policy Enforcement**: DBShield's dry-run authorization token guarantees that a query adheres to automated safety policies (blast radius thresholds, tautology checks, parameter binding).
+- **Human Approval Hand-Off**: In sensitive production workflows, `db_dry_run` outputs can be piped to an external human-in-the-loop review system (Slack, Teams, or ticketing webhook) before the token is submitted to `db_commit`.
+
+---
+
 ## 🗺️ Project Roadmap
 
 - [x] **Phase 1: Architecture, Core Engine & Repository Scaffolding**

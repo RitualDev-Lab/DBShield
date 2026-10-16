@@ -36,7 +36,7 @@ export async function createMcpServer(
   const guardEngine = new SqlGuardEngine(config);
   const sandboxEngine = new SandboxEngine(adapter, guardEngine, config);
   const piiRedactor = new PiiRedactor(config.customPiiColumns);
-  const auditLogger = new AuditLogger(config.auditLogPath);
+  const auditLogger = new AuditLogger(config.auditLogPath, 500, piiRedactor);
   const explainer = new QueryExplainer(adapter);
 
   const server = new McpServer({
@@ -273,6 +273,9 @@ export async function createMcpServer(
           ],
         };
       } catch (err) {
+        const rawMessage = (err as Error).message;
+        const sanitizedMessage = piiRedactor.redactErrorMessage(rawMessage);
+
         await auditLogger.log({
           auditId: randomUUID(),
           timestamp: new Date().toISOString(),
@@ -281,7 +284,7 @@ export async function createMcpServer(
           status: "ERROR",
           riskLevel: evaluation.riskLevel,
           riskScore: evaluation.riskScore,
-          violations: [(err as Error).message],
+          violations: [sanitizedMessage],
         });
 
         return {
@@ -292,7 +295,7 @@ export async function createMcpServer(
               text: JSON.stringify(
                 {
                   status: "DATABASE_ERROR",
-                  error: (err as Error).message,
+                  error: sanitizedMessage,
                 },
                 null,
                 2,
@@ -431,6 +434,9 @@ export async function createMcpServer(
           ],
         };
       } catch (err) {
+        const rawMessage = (err as Error).message;
+        const sanitizedMessage = piiRedactor.redactErrorMessage(rawMessage);
+
         await auditLogger.log({
           auditId: randomUUID(),
           timestamp: new Date().toISOString(),
@@ -439,7 +445,7 @@ export async function createMcpServer(
           status: "ERROR",
           riskLevel: "BLOCKED",
           riskScore: 70,
-          violations: [(err as Error).message],
+          violations: [sanitizedMessage],
         });
 
         return {
@@ -450,7 +456,7 @@ export async function createMcpServer(
               text: JSON.stringify(
                 {
                   status: "COMMIT_FAILED",
-                  error: (err as Error).message,
+                  error: sanitizedMessage,
                 },
                 null,
                 2,
