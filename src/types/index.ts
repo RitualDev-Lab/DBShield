@@ -94,7 +94,8 @@ export interface DBShieldConfig {
   connectionString?: string;
   storagePath?: string; // for SQLite file path or :memory:
   safetyTier: SafetyTier;
-  maxRowsPerMutation: number; // Default 50 in BALANCED, 1 in STRICT, 500 in PERMISSIVE
+  maxRowsPerMutation: number; // Hard ceiling (default 50 in BALANCED, 1 in STRICT, 500 in PERMISSIVE)
+  warnRowsPerMutation?: number; // Soft warning threshold (default 10 in BALANCED, 1 in STRICT, 100 in PERMISSIVE)
   maxRowsPerRead: number; // Hard server-controlled ceiling for row-returning queries (default 500)
   allowDestructiveDDL: boolean; // Default false
   enablePiiMasking: boolean; // Default true
@@ -106,9 +107,17 @@ export interface DatabaseAdapter {
   dialect: DatabaseDialect;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  query(sql: string, params?: unknown[], options?: { maxRows?: number }): Promise<QueryResult>;
+  query(
+    sql: string,
+    params?: unknown[],
+    options?: { maxRows?: number; maxMutationRows?: number },
+  ): Promise<QueryResult>;
   executeDryRun(sql: string, params?: unknown[]): Promise<DryRunResult>;
-  executeCommit(sql: string, params?: unknown[]): Promise<QueryResult>;
+  executeCommit(
+    sql: string,
+    params?: unknown[],
+    options?: { maxRows?: number; expectedRows?: number },
+  ): Promise<QueryResult>;
   getSchema(): Promise<TableSchema[]>;
   getTableSchema(tableName: string): Promise<TableSchema | null>;
 }

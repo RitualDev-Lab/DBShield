@@ -19,10 +19,12 @@ export class SqliteAdapter implements DatabaseAdapter {
   private db: DatabaseSync | null = null;
   private readonly storagePath: string;
   private readonly defaultMaxRows: number;
+  private readonly defaultMaxMutationRows: number;
 
-  constructor(storagePath = ":memory:", defaultMaxRows = 500) {
+  constructor(storagePath = ":memory:", defaultMaxRows = 500, defaultMaxMutationRows = 50) {
     this.storagePath = storagePath;
     this.defaultMaxRows = defaultMaxRows;
+    this.defaultMaxMutationRows = defaultMaxMutationRows;
   }
 
   async connect(): Promise<void> {
@@ -48,7 +50,7 @@ export class SqliteAdapter implements DatabaseAdapter {
   async query(
     sql: string,
     params: unknown[] = [],
-    options?: { maxRows?: number },
+    options?: { maxRows?: number; maxMutationRows?: number },
   ): Promise<QueryResult> {
     const db = this.ensureConnected();
     const startTime = performance.now();
@@ -120,18 +122,40 @@ export class SqliteAdapter implements DatabaseAdapter {
       };
     }
 
-    // Mutation or DDL
-    const result = stmt.run(...(params as SqliteParam[]));
-    const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
+    // Mutation or DDL: enforce transactional execution and row ceiling
+    const maxMutationRows = options?.maxMutationRows ?? this.defaultMaxMutationRows ?? 50;
 
-    return {
-      rows: [],
-      rowCount: Number(result.changes || 0),
-      columns: [],
-      executionTimeMs,
-      redactedColumns: [],
-      auditId,
-    };
+    db.exec("BEGIN TRANSACTION;");
+    try {
+      const result = stmt.run(...(params as SqliteParam[]));
+      const changes = Number(result.changes || 0);
+
+      if (changes > maxMutationRows) {
+        db.exec("ROLLBACK;");
+        throw new Error(
+          `[MUTATION_LIMIT_EXCEEDED] Mutation affected ${changes} rows, exceeding the hard safety limit of ${maxMutationRows} rows. Transaction rolled back.`,
+        );
+      }
+
+      db.exec("COMMIT;");
+      const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
+
+      return {
+        rows: [],
+        rowCount: changes,
+        columns: [],
+        executionTimeMs,
+        redactedColumns: [],
+        auditId,
+      };
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK;");
+      } catch {
+        // Rollback on failure
+      }
+      throw err;
+    }
   }
 
   async executeDryRun(sql: string, params: unknown[] = []): Promise<DryRunResult> {
@@ -180,21 +204,42 @@ export class SqliteAdapter implements DatabaseAdapter {
     };
   }
 
-  async executeCommit(sql: string, params: unknown[] = []): Promise<QueryResult> {
+  async executeCommit(
+    sql: string,
+    params: unknown[] = [],
+    options?: { maxRows?: number; expectedRows?: number },
+  ): Promise<QueryResult> {
     const db = this.ensureConnected();
     const startTime = performance.now();
     const auditId = randomUUID();
+    const maxRows = options?.maxRows ?? this.defaultMaxMutationRows ?? 50;
 
     db.exec("BEGIN TRANSACTION;");
     try {
       const stmt = db.prepare(sql);
       const res = stmt.run(...(params as SqliteParam[]));
+      const changes = Number(res.changes || 0);
+
+      if (changes > maxRows) {
+        db.exec("ROLLBACK;");
+        throw new Error(
+          `[MUTATION_LIMIT_EXCEEDED] Mutation affected ${changes} rows, exceeding the authorized limit of ${maxRows} rows. Transaction rolled back.`,
+        );
+      }
+
+      if (options?.expectedRows !== undefined && changes !== options.expectedRows) {
+        db.exec("ROLLBACK;");
+        throw new Error(
+          `[SIMULATION_DELTA_DRIFT] Data changed between simulation and commit. Simulated affected rows was ${options.expectedRows}, but actual commit would affect ${changes} rows. Transaction rolled back for safety.`,
+        );
+      }
+
       db.exec("COMMIT;");
 
       const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
       return {
         rows: [],
-        rowCount: Number(res.changes || 0),
+        rowCount: changes,
         columns: [],
         executionTimeMs,
         redactedColumns: [],

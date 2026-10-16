@@ -211,7 +211,10 @@ export async function createMcpServer(
       }
 
       try {
-        const result = await adapter.query(sql, params, { maxRows: config.maxRowsPerRead });
+        const result = await adapter.query(sql, params, {
+          maxRows: config.maxRowsPerRead,
+          maxMutationRows: config.maxRowsPerMutation,
+        });
         let finalRows = result.rows;
         let piiReport: PiiRedactionReport | undefined;
 

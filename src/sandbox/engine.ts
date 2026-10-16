@@ -48,23 +48,29 @@ export class SandboxEngine {
     const affectedRows = adapterResult.simulatedAffectedRows;
     const warnings = [...adapterResult.warnings, ...evaluation.warnings];
 
-    // Blast Radius Limit Checking
-    if (affectedRows > this.config.maxRowsPerMutation) {
-      const blastWarning = `Simulated row impact (${affectedRows} rows) exceeds maximum threshold (${this.config.maxRowsPerMutation} rows).`;
-      if (this.config.safetyTier === "STRICT") {
-        return {
-          safe: false,
-          simulatedAffectedRows: affectedRows,
-          targetTables: evaluation.targetTables,
-          executionTimeMs: adapterResult.executionTimeMs,
-          warnings: [
-            ...warnings,
-            `[EXCESSIVE_BLAST_RADIUS] ${blastWarning} Blocked under STRICT safety tier.`,
-          ],
-          rollbackVerified: adapterResult.rollbackVerified,
-        };
-      }
-      warnings.push(`[BLAST_RADIUS_WARNING] ${blastWarning}`);
+    // Blast Radius Limit Checking: separate soft warning threshold from hard safety limit
+    const maxRows = this.config.maxRowsPerMutation;
+    const warnRows = this.config.warnRowsPerMutation ?? 10;
+
+    if (affectedRows > maxRows) {
+      const blastWarning = `Simulated row impact (${affectedRows} rows) exceeds maximum hard ceiling (${maxRows} rows).`;
+      return {
+        safe: false,
+        simulatedAffectedRows: affectedRows,
+        targetTables: evaluation.targetTables,
+        executionTimeMs: adapterResult.executionTimeMs,
+        warnings: [
+          ...warnings,
+          `[EXCESSIVE_BLAST_RADIUS] ${blastWarning} Execution blocked across all safety tiers.`,
+        ],
+        rollbackVerified: adapterResult.rollbackVerified,
+      };
+    }
+
+    if (affectedRows > warnRows) {
+      warnings.push(
+        `[BLAST_RADIUS_WARNING] Simulated row impact (${affectedRows} rows) exceeds soft warning threshold (${warnRows} rows).`,
+      );
     }
 
     // Issue single-use commit authorization token
@@ -135,7 +141,10 @@ export class SandboxEngine {
       }
     }
 
-    // Execute atomic commit
-    return await this.adapter.executeCommit(sql, params);
+    // Execute atomic commit with hard row ceiling and simulation drift prevention
+    return await this.adapter.executeCommit(sql, params, {
+      maxRows: this.config.maxRowsPerMutation,
+      expectedRows: verification.payload?.affectedRows,
+    });
   }
 }
