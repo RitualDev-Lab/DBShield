@@ -129,7 +129,13 @@ npx @ritualdev-lab/dbshield init
   - Universal `DatabaseAdapter` interface & zero-config SQLite driver
   - `@modelcontextprotocol/sdk` Stdio server setup
   - Configuration manager & CLI entrypoint
-- [ ] **Phase 2: SQL AST Parser & Mutation Guardrail Engine**
+- [x] **Phase 2: SQL AST Parser & Mutation Guardrail Engine**
+  - AST-level query inspection with `node-sql-parser`
+  - Destructive DDL blocker (`DROP TABLE`, `TRUNCATE`, `ALTER TABLE DROP COLUMN`)
+  - Blind mutation protection (unconstrained `DELETE` / `UPDATE` without `WHERE`)
+  - Boolean & constant tautology bypass detection (`1=1`, `WHERE true`, `OR 1=1`)
+  - Multi-statement injection defense & safety tier scoring (`STRICT`, `BALANCED`, `PERMISSIVE`)
+  - First-class `db_query` MCP tool with automated guardrail interception
 - [ ] **Phase 3: Dry-Run Sandbox & Auto-Rollback Transaction Engine**
 - [ ] **Phase 4: Real-Time Dynamic PII Masking & Data Redaction**
 - [ ] **Phase 5: Full MCP Tool Suite & Cursor/Claude Auto-Configurator**

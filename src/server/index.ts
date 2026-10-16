@@ -3,12 +3,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { createDatabaseAdapter } from "../adapters/index.js";
 import { loadConfig } from "../config/index.js";
+import { SqlGuardEngine } from "../guard/index.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
 
 export interface McpServerInstance {
   server: McpServer;
   adapter: DatabaseAdapter;
   config: DBShieldConfig;
+  guardEngine: SqlGuardEngine;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -21,6 +23,8 @@ export async function createMcpServer(
 
   const adapter = createDatabaseAdapter(config);
   await adapter.connect();
+
+  const guardEngine = new SqlGuardEngine(config);
 
   const server = new McpServer({
     name: "dbshield",
@@ -104,10 +108,124 @@ export async function createMcpServer(
     },
   );
 
+  // Safe Query Execution tool with AST Guardrail
+  server.tool(
+    "db_query",
+    "Safely execute a SQL query through DBShield guardrails. Destructive DDL and unconstrained mutations without WHERE clauses are automatically intercepted and blocked.",
+    {
+      sql: z.string().describe("The SQL query to execute."),
+      params: z
+        .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+        .optional()
+        .describe("Optional parameterized query values."),
+    },
+    async ({ sql, params }) => {
+      const evaluation = guardEngine.evaluate(sql);
+
+      if (!evaluation.allowed) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "BLOCKED",
+                  blockedBy: "DBShield AST Guardrail Engine",
+                  riskLevel: evaluation.riskLevel,
+                  riskScore: evaluation.riskScore,
+                  operation: evaluation.operation,
+                  targetTables: evaluation.targetTables,
+                  violations: evaluation.violations,
+                  warnings: evaluation.warnings,
+                  suggestion:
+                    evaluation.violations[0]?.suggestion ||
+                    "Please revise your SQL statement to satisfy DBShield safety guardrails.",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      if (evaluation.requiresDryRun) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "DRY_RUN_REQUIRED",
+                  message: `Under '${config.safetyTier}' safety tier, this mutation requires a pre-flight dry run simulation before direct execution.`,
+                  riskLevel: evaluation.riskLevel,
+                  riskScore: evaluation.riskScore,
+                  operation: evaluation.operation,
+                  targetTables: evaluation.targetTables,
+                  suggestion:
+                    "Use the 'db_dry_run' tool to preview row impact and obtain an execution authorization token.",
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      try {
+        const result = await adapter.query(sql, params);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "SUCCESS",
+                  riskLevel: evaluation.riskLevel,
+                  riskScore: evaluation.riskScore,
+                  operation: evaluation.operation,
+                  targetTables: evaluation.targetTables,
+                  rowCount: result.rowCount,
+                  executionTimeMs: result.executionTimeMs,
+                  columns: result.columns,
+                  rows: result.rows,
+                  auditId: result.auditId,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "DATABASE_ERROR",
+                  error: (err as Error).message,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+    },
+  );
+
   return {
     server,
     adapter,
     config,
+    guardEngine,
     async start() {
       const transport = new StdioServerTransport();
       await server.connect(transport);
