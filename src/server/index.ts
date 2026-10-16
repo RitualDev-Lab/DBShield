@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createDatabaseAdapter } from "../adapters/index.js";
 import { loadConfig } from "../config/index.js";
 import { SqlGuardEngine } from "../guard/index.js";
+import { type PiiRedactionReport, PiiRedactor } from "../pii/index.js";
 import { SandboxEngine } from "../sandbox/index.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
 
@@ -13,6 +14,7 @@ export interface McpServerInstance {
   config: DBShieldConfig;
   guardEngine: SqlGuardEngine;
   sandboxEngine: SandboxEngine;
+  piiRedactor: PiiRedactor;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -28,6 +30,7 @@ export async function createMcpServer(
 
   const guardEngine = new SqlGuardEngine(config);
   const sandboxEngine = new SandboxEngine(adapter, guardEngine, config);
+  const piiRedactor = new PiiRedactor(config.customPiiColumns);
 
   const server = new McpServer({
     name: "dbshield",
@@ -180,6 +183,14 @@ export async function createMcpServer(
 
       try {
         const result = await adapter.query(sql, params);
+        let finalRows = result.rows;
+        let piiReport: PiiRedactionReport | undefined;
+
+        if (config.enablePiiMasking && finalRows.length > 0) {
+          piiReport = piiRedactor.redactRows(finalRows, config.customPiiColumns);
+          finalRows = piiReport.sanitizedRows;
+        }
+
         return {
           content: [
             {
@@ -194,7 +205,15 @@ export async function createMcpServer(
                   rowCount: result.rowCount,
                   executionTimeMs: result.executionTimeMs,
                   columns: result.columns,
-                  rows: result.rows,
+                  rows: finalRows,
+                  piiRedaction: config.enablePiiMasking
+                    ? {
+                        enabled: true,
+                        redactedColumns: piiReport?.redactedColumns || [],
+                        categoriesDetected: piiReport?.categoriesDetected || [],
+                        totalFieldsRedacted: piiReport?.totalFieldsRedacted || 0,
+                      }
+                    : { enabled: false },
                   auditId: result.auditId,
                 },
                 null,
@@ -351,6 +370,7 @@ export async function createMcpServer(
     config,
     guardEngine,
     sandboxEngine,
+    piiRedactor,
     async start() {
       const transport = new StdioServerTransport();
       await server.connect(transport);

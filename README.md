@@ -142,7 +142,13 @@ npx @ritualdev-lab/dbshield init
   - Cryptographically signed HMAC-SHA256 two-phase commit tokens (`CommitTokenManager`)
   - Query hash tamper-proofing, short-lived TTLs, and replay attack prevention
   - First-class `db_dry_run` and `db_commit` MCP tools
-- [ ] **Phase 4: Real-Time Dynamic PII Masking & Data Redaction**
+- [x] **Phase 4: Real-Time Dynamic PII Masking & Data Redaction**
+  - Heuristic column detection for passwords, secrets, tokens, API keys, emails, phones, SSNs, credit cards
+  - High-performance regex inspection for inline PII embedded in generic text columns
+  - Format-preserving deterministic masking (`a***@ritualdev.in`, `+***-***-5309`, `****-****-****-4444`)
+  - Zero-leak secret replacement (`[REDACTED_SECRET]`, `[REDACTED_TOKEN]`)
+  - Automated compliance audit report headers injected into MCP `db_query` responses
+  - Custom column overrides via `config.customPiiColumns`
 - [ ] **Phase 5: Full MCP Tool Suite & Cursor/Claude Auto-Configurator**
 - [ ] **Phase 6: Comprehensive Testing, CI/CD & npm Release**
 
