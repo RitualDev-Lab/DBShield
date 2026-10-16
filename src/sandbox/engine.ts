@@ -68,7 +68,16 @@ export class SandboxEngine {
     }
 
     // Issue single-use commit authorization token
-    const tokenInfo = this.tokenManager.issueToken(sql, affectedRows, evaluation.targetTables);
+    const tokenInfo = this.tokenManager.issueToken(
+      sql,
+      affectedRows,
+      evaluation.targetTables,
+      params,
+      {
+        databaseIdentity: this.config.storagePath,
+        safetyTier: this.config.safetyTier,
+      },
+    );
 
     return {
       safe: true,
@@ -83,7 +92,21 @@ export class SandboxEngine {
   }
 
   public async commit(token: string, sql: string, params: unknown[] = []): Promise<QueryResult> {
-    const verification = this.tokenManager.verifyAndConsume(token, sql);
+    // Recheck execution constraints before commit
+    const evaluation = this.guard.evaluate(sql);
+    if (
+      !evaluation.allowed &&
+      (evaluation.riskLevel === "CRITICAL" || evaluation.riskLevel === "BLOCKED")
+    ) {
+      throw new Error(
+        `Security violation: Mutation rejected by guardrail policy during commit recheck: ${evaluation.violations.map((v) => v.message).join("; ")}`,
+      );
+    }
+
+    const verification = this.tokenManager.verifyAndConsume(token, sql, params, {
+      databaseIdentity: this.config.storagePath,
+      safetyTier: this.config.safetyTier,
+    });
 
     if (!verification.valid) {
       switch (verification.error) {
@@ -98,6 +121,10 @@ export class SandboxEngine {
         case "TOKEN_ALREADY_USED":
           throw new Error(
             "Security alert: Authorization token has already been consumed (single-use replay prevention).",
+          );
+        case "PARAMS_MISMATCH":
+          throw new Error(
+            "Security violation: Query parameter values do not match the parameters authorized during dry-run simulation.",
           );
         case "QUERY_TAMPERED":
           throw new Error(

@@ -191,3 +191,73 @@ test("MCP Server - db_dry_run and db_commit Tools Integration", async () => {
 
   await instance.stop();
 });
+
+test("Phase 3 (B1): CommitTokenManager - Parameter Tamper Protection", () => {
+  const manager = new CommitTokenManager("test-secret-key-123", 60);
+  const sql = "UPDATE accounts SET balance = balance - ? WHERE id = ?;";
+  const authorizedParams = [100, 1];
+  const tamperedParams = [1000000, 999];
+
+  const tokenInfo = manager.issueToken(sql, 1, ["accounts"], authorizedParams);
+
+  // Attempting to consume with tampered parameters must be strictly rejected
+  const tamperedRes = manager.verifyAndConsume(tokenInfo.token, sql, tamperedParams);
+  assert.equal(tamperedRes.valid, false);
+  assert.equal(tamperedRes.error, "PARAMS_MISMATCH");
+
+  // Consuming with exact authorized parameters succeeds
+  const validRes = manager.verifyAndConsume(tokenInfo.token, sql, authorizedParams);
+  assert.equal(validRes.valid, true);
+});
+
+test("Phase 3 (B1): CommitTokenManager - Preserves Literal Whitespace without Collapsing", () => {
+  const manager = new CommitTokenManager("test-secret-key-123", 60);
+  // SQL containing specific multi-space formatting inside literal
+  const originalSql = "UPDATE users SET bio = 'Line 1    spaces    Line 2' WHERE id = 1;";
+  const collapsedSql = "UPDATE users SET bio = 'Line 1 spaces Line 2' WHERE id = 1;";
+
+  const tokenInfo = manager.issueToken(originalSql, 1, ["users"]);
+
+  // If a naive regex collapsed spaces inside the literal, collapsedSql would match.
+  // With exact literal preservation, collapsedSql is correctly identified as tampered!
+  const tamperCheck = manager.verifyAndConsume(tokenInfo.token, collapsedSql);
+  assert.equal(tamperCheck.valid, false);
+  assert.equal(tamperCheck.error, "QUERY_TAMPERED");
+});
+
+test("Phase 3 (B1): SandboxEngine - Parameter Bound Two-Phase Commit Enforcement", async () => {
+  const adapter = new SqliteAdapter(":memory:");
+  await adapter.connect();
+
+  await adapter.query("CREATE TABLE users (id INTEGER PRIMARY KEY, status TEXT, role TEXT);");
+  await adapter.query("INSERT INTO users VALUES (1, 'pending', 'user'), (2, 'pending', 'user');");
+
+  const guard = new SqlGuardEngine(BASE_CONFIG);
+  const sandbox = new SandboxEngine(adapter, guard, BASE_CONFIG);
+
+  const sql = "UPDATE users SET status = ? WHERE id = ?;";
+  const dryRunParams = ["active", 1];
+
+  // Dry run authorizing status = 'active' for user 1
+  const dryRunRes = await sandbox.dryRun(sql, dryRunParams);
+  assert.equal(dryRunRes.safe, true);
+  assert.ok(dryRunRes.commitToken);
+
+  // Attacker attempts to apply token to user 2 instead
+  await assert.rejects(
+    async () => await sandbox.commit(dryRunRes.commitToken, sql, ["active", 2]),
+    /Query parameter values do not match/,
+  );
+
+  // Legitimate commit with matching parameters succeeds
+  const commitRes = await sandbox.commit(dryRunRes.commitToken, sql, dryRunParams);
+  assert.equal(commitRes.rowCount, 1);
+
+  // User 1 is active, user 2 remains pending
+  const u1 = await adapter.query("SELECT status FROM users WHERE id = 1;");
+  assert.equal(u1.rows[0].status, "active");
+  const u2 = await adapter.query("SELECT status FROM users WHERE id = 2;");
+  assert.equal(u2.rows[0].status, "pending");
+
+  await adapter.disconnect();
+});
