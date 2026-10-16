@@ -9,8 +9,12 @@
     "dbshield": "dist/cli.js"
   },
   "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
+    "prepack": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/cli.js",
     "test": "tsx --test \"tests/**/*.test.ts\"",
@@ -56,6 +60,6 @@
     "typescript": "^5.8.2"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   }
 }

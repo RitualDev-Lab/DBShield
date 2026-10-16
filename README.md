@@ -7,7 +7,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-8A2BE2.svg)](https://modelcontextprotocol.io/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.0-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0-green.svg)](https://nodejs.org/)
+[![CI](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml/badge.svg)](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml)
 [![Biome](https://img.shields.io/badge/Code%20Style-Biome-60a5fa.svg)](https://biomejs.dev)
 
 *Protect your databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.*
@@ -150,8 +151,11 @@ npx @ritualdev-lab/dbshield init
   - `db_audit_log` in-memory circular audit buffer with status & risk score filtering
   - Interactive 1-click CLI configurators (`dbshield install-claude`, `dbshield install-cursor`)
   - Cross-platform configuration file detection & graceful merging
-- [ ] **Phase 6: Comprehensive Testing, CI/CD & npm Release**
-- [ ] **Phase 6: Comprehensive Testing, CI/CD & npm Release**
+- [x] **Phase 6: Automated Testing, CI/CD, Documentation & Packaging**
+  - Comprehensive unit & integration testing suite (42 tests passing across all engines)
+  - GitHub Actions multi-platform CI matrix testing on Node.js 22 & 24 across Ubuntu and Windows
+  - Automated Release & npm publish workflow on tag push
+  - Zero-native-dependency bundle verification and production distribution via `pnpm pack`
 
 ---
 
