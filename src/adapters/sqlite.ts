@@ -18,9 +18,11 @@ export class SqliteAdapter implements DatabaseAdapter {
   public readonly dialect: DatabaseDialect = "sqlite";
   private db: DatabaseSync | null = null;
   private readonly storagePath: string;
+  private readonly defaultMaxRows: number;
 
-  constructor(storagePath = ":memory:") {
+  constructor(storagePath = ":memory:", defaultMaxRows = 500) {
     this.storagePath = storagePath;
+    this.defaultMaxRows = defaultMaxRows;
   }
 
   async connect(): Promise<void> {
@@ -43,7 +45,11 @@ export class SqliteAdapter implements DatabaseAdapter {
     return this.db;
   }
 
-  async query(sql: string, params: unknown[] = []): Promise<QueryResult> {
+  async query(
+    sql: string,
+    params: unknown[] = [],
+    options?: { maxRows?: number },
+  ): Promise<QueryResult> {
     const db = this.ensureConnected();
     const startTime = performance.now();
     const auditId = randomUUID();
@@ -73,7 +79,23 @@ export class SqliteAdapter implements DatabaseAdapter {
     }
 
     if (isRowReturning) {
-      const rows = stmt.all(...(params as SqliteParam[])) as Record<string, unknown>[];
+      const maxRows = options?.maxRows ?? this.defaultMaxRows ?? 500;
+      const rows: Record<string, unknown>[] = [];
+      let isTruncated = false;
+
+      // Stream rows using stmt.iterate() to avoid materializing unbounded rows in memory
+      const iterator = stmt.iterate(...(params as SqliteParam[])) as IterableIterator<
+        Record<string, unknown>
+      >;
+      for (const row of iterator) {
+        if (rows.length < maxRows) {
+          rows.push(row);
+        } else {
+          isTruncated = true;
+          break;
+        }
+      }
+
       const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
       const columns = rows.length > 0 ? Object.keys(rows[0]) : cols.map((c) => c.name);
 
@@ -84,6 +106,17 @@ export class SqliteAdapter implements DatabaseAdapter {
         executionTimeMs,
         redactedColumns: [],
         auditId,
+        meta: {
+          totalReturned: rows.length,
+          isTruncated,
+          maxAllowedRows: maxRows,
+          hasMore: isTruncated,
+          ...(isTruncated
+            ? {
+                warning: `Query results were capped at ${maxRows} rows to prevent memory exhaustion and context window bloat. Use LIMIT and OFFSET to paginate.`,
+              }
+            : {}),
+        },
       };
     }
 

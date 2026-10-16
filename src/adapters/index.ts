@@ -6,7 +6,7 @@ export * from "./sqlite.js";
 export function createDatabaseAdapter(config: DBShieldConfig): DatabaseAdapter {
   switch (config.dialect) {
     case "sqlite":
-      return new SqliteAdapter(config.storagePath || ":memory:");
+      return new SqliteAdapter(config.storagePath || ":memory:", config.maxRowsPerRead);
     case "postgres":
     case "mysql":
       // Fallback or external driver adapter

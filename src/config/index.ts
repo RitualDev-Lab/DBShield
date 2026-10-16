@@ -9,6 +9,7 @@ export const ConfigSchema = z.object({
   storagePath: z.string().optional().default("./dbshield.sqlite"),
   safetyTier: z.enum(["STRICT", "BALANCED", "PERMISSIVE"]).default("BALANCED"),
   maxRowsPerMutation: z.number().int().positive().default(50),
+  maxRowsPerRead: z.number().int().positive().default(500),
   allowDestructiveDDL: z.boolean().default(false),
   enablePiiMasking: z.boolean().default(true),
   customPiiColumns: z.array(z.string()).default([]),
@@ -20,6 +21,7 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   storagePath: "./dbshield.sqlite",
   safetyTier: "BALANCED",
   maxRowsPerMutation: 50,
+  maxRowsPerRead: 500,
   allowDestructiveDDL: false,
   enablePiiMasking: true,
   customPiiColumns: [],
@@ -53,6 +55,9 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   if (process.env.DBSHIELD_MAX_MUTATION_ROWS) {
     envConfig.maxRowsPerMutation = Number.parseInt(process.env.DBSHIELD_MAX_MUTATION_ROWS, 10);
   }
+  if (process.env.DBSHIELD_MAX_READ_ROWS) {
+    envConfig.maxRowsPerRead = Number.parseInt(process.env.DBSHIELD_MAX_READ_ROWS, 10);
+  }
   if (process.env.DBSHIELD_ALLOW_DESTRUCTIVE_DDL) {
     envConfig.allowDestructiveDDL = process.env.DBSHIELD_ALLOW_DESTRUCTIVE_DDL === "true";
   }
@@ -72,6 +77,15 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
       merged.maxRowsPerMutation = 1;
     } else if (merged.safetyTier === "PERMISSIVE") {
       merged.maxRowsPerMutation = 500;
+    }
+  }
+
+  // Adjust maxRowsPerRead if default tier is strictly applied and not custom set
+  if (!fileConfig.maxRowsPerRead && !envConfig.maxRowsPerRead) {
+    if (merged.safetyTier === "STRICT") {
+      merged.maxRowsPerRead = 100;
+    } else if (merged.safetyTier === "PERMISSIVE") {
+      merged.maxRowsPerRead = 2000;
     }
   }
 

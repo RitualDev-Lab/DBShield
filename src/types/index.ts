@@ -33,6 +33,14 @@ export interface GuardrailEvaluation {
   requiresDryRun: boolean;
 }
 
+export interface QueryPaginationMeta {
+  totalReturned: number;
+  isTruncated: boolean;
+  maxAllowedRows: number;
+  hasMore?: boolean;
+  warning?: string;
+}
+
 export interface QueryResult {
   rows: Record<string, unknown>[];
   rowCount: number;
@@ -40,6 +48,7 @@ export interface QueryResult {
   executionTimeMs: number;
   redactedColumns: string[];
   auditId: string;
+  meta?: QueryPaginationMeta;
 }
 
 export interface DryRunResult {
@@ -86,6 +95,7 @@ export interface DBShieldConfig {
   storagePath?: string; // for SQLite file path or :memory:
   safetyTier: SafetyTier;
   maxRowsPerMutation: number; // Default 50 in BALANCED, 1 in STRICT, 500 in PERMISSIVE
+  maxRowsPerRead: number; // Hard server-controlled ceiling for row-returning queries (default 500)
   allowDestructiveDDL: boolean; // Default false
   enablePiiMasking: boolean; // Default true
   customPiiColumns?: string[];
@@ -96,7 +106,7 @@ export interface DatabaseAdapter {
   dialect: DatabaseDialect;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  query(sql: string, params?: unknown[]): Promise<QueryResult>;
+  query(sql: string, params?: unknown[], options?: { maxRows?: number }): Promise<QueryResult>;
   executeDryRun(sql: string, params?: unknown[]): Promise<DryRunResult>;
   executeCommit(sql: string, params?: unknown[]): Promise<QueryResult>;
   getSchema(): Promise<TableSchema[]>;

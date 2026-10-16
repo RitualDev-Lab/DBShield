@@ -63,6 +63,7 @@ export async function createMcpServer(
                 safetyTier: config.safetyTier,
                 piiMaskingEnabled: config.enablePiiMasking,
                 maxRowsPerMutation: config.maxRowsPerMutation,
+                maxRowsPerRead: config.maxRowsPerRead,
                 allowDestructiveDDL: config.allowDestructiveDDL,
                 totalTables: schemas.length,
                 tables: schemas.map((s) => s.tableName),
@@ -210,7 +211,7 @@ export async function createMcpServer(
       }
 
       try {
-        const result = await adapter.query(sql, params);
+        const result = await adapter.query(sql, params, { maxRows: config.maxRowsPerRead });
         let finalRows = result.rows;
         let piiReport: PiiRedactionReport | undefined;
 
@@ -247,6 +248,11 @@ export async function createMcpServer(
                   executionTimeMs: result.executionTimeMs,
                   columns: result.columns,
                   rows: finalRows,
+                  pagination: result.meta ?? {
+                    totalReturned: result.rowCount,
+                    isTruncated: false,
+                    maxAllowedRows: config.maxRowsPerRead,
+                  },
                   piiRedaction: config.enablePiiMasking
                     ? {
                         enabled: true,

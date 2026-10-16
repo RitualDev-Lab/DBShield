@@ -11,6 +11,7 @@ test("DBShield Config Loader - Default Values & Safety Tiers", async () => {
   assert.equal(config.dialect, "sqlite");
   assert.equal(config.safetyTier, "BALANCED");
   assert.equal(config.maxRowsPerMutation, 50);
+  assert.equal(config.maxRowsPerRead, 500);
   assert.equal(config.allowDestructiveDDL, false);
   assert.equal(config.enablePiiMasking, true);
 });

@@ -94,9 +94,17 @@ export class SqlGuardEngine {
     switch (op) {
       case "SELECT": {
         riskScore = 5;
-        if (!ast.limit && this.config.safetyTier === "STRICT") {
+        const limitObj = ast.limit as { value?: Array<{ value?: number | string }> } | undefined;
+        const requestedLimit =
+          limitObj?.value?.[0]?.value !== undefined ? Number(limitObj.value[0].value) : undefined;
+
+        if (requestedLimit !== undefined && requestedLimit > this.config.maxRowsPerRead) {
           warnings.push(
-            "SELECT query has no LIMIT clause. In STRICT tier, adding a LIMIT protects against large payload memory exhaustion.",
+            `Requested LIMIT (${requestedLimit}) exceeds server maxRowsPerRead ceiling (${this.config.maxRowsPerRead}). Results will be safely capped at ${this.config.maxRowsPerRead} rows.`,
+          );
+        } else if (requestedLimit === undefined && this.config.safetyTier === "STRICT") {
+          warnings.push(
+            `SELECT query has no LIMIT clause. In STRICT tier, adding a LIMIT protects against large payload memory exhaustion (server cap: ${this.config.maxRowsPerRead} rows).`,
           );
         }
         break;
