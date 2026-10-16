@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
+import path from "node:path";
 import test from "node:test";
 import { SqliteAdapter } from "../src/adapters/sqlite.js";
 import { DEFAULT_CONFIG, loadConfig } from "../src/config/index.js";
@@ -98,10 +99,13 @@ test("MCP Server - Factory & Lifecycle Initialization", async () => {
 });
 
 test("DBShield CLI - Help and Version Flags", () => {
-  const versionOutput = execSync("npx tsx src/cli.ts --version", { encoding: "utf8" });
+  const cliPath = path.resolve("dist/cli.js");
+  const versionOutput = execSync(`"${process.execPath}" "${cliPath}" --version`, {
+    encoding: "utf8",
+  });
   assert.ok(versionOutput.includes("dbshield v0.1.0"));
 
-  const helpOutput = execSync("npx tsx src/cli.ts --help", { encoding: "utf8" });
+  const helpOutput = execSync(`"${process.execPath}" "${cliPath}" --help`, { encoding: "utf8" });
   assert.ok(helpOutput.includes("DBShield - Database Guardrail & Sandboxing MCP Server"));
   assert.ok(helpOutput.includes("claude_desktop_config.json"));
   assert.ok(helpOutput.includes(".cursor/mcp.json"));
