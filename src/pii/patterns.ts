@@ -8,7 +8,8 @@ export interface PiiCategoryRule {
 export const PII_RULES: PiiCategoryRule[] = [
   {
     category: "PASSWORD",
-    columnRegex: /^(pass|passwd|password|pwd|salt|hash|secret|secret_key|private_key)$/i,
+    columnRegex:
+      /^(pass|passwd|password|password_hash|passwd_hash|pwd|salt|hash|secret|secret_key|private_key)$/i,
     mask: () => "[REDACTED_SECRET]",
   },
   {
