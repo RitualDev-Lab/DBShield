@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { stripSqlComments } from "../guard/ast.js";
 import type {
   ColumnDefinition,
   DatabaseAdapter,
@@ -47,15 +48,34 @@ export class SqliteAdapter implements DatabaseAdapter {
     const startTime = performance.now();
     const auditId = randomUUID();
 
-    const trimmed = sql.trim().toUpperCase();
-    const isSelect =
-      trimmed.startsWith("SELECT") || trimmed.startsWith("PRAGMA") || trimmed.startsWith("EXPLAIN");
+    const stripped = stripSqlComments(sql);
+    if (!stripped) {
+      return {
+        rows: [],
+        rowCount: 0,
+        columns: [],
+        executionTimeMs: 0,
+        redactedColumns: [],
+        auditId,
+      };
+    }
 
-    if (isSelect) {
-      const stmt = db.prepare(sql);
+    const stmt = db.prepare(sql);
+    let isRowReturning = false;
+    let cols: Array<{ name: string }> = [];
+
+    try {
+      cols = stmt.columns() as Array<{ name: string }>;
+      isRowReturning = cols.length > 0;
+    } catch {
+      // Handled as non-row-returning / finalized command
+      isRowReturning = false;
+    }
+
+    if (isRowReturning) {
       const rows = stmt.all(...(params as SqliteParam[])) as Record<string, unknown>[];
       const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : cols.map((c) => c.name);
 
       return {
         rows,
@@ -68,7 +88,6 @@ export class SqliteAdapter implements DatabaseAdapter {
     }
 
     // Mutation or DDL
-    const stmt = db.prepare(sql);
     const result = stmt.run(...(params as SqliteParam[]));
     const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
 

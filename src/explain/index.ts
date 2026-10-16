@@ -1,3 +1,4 @@
+import { stripSqlComments } from "../guard/ast.js";
 import type { DatabaseAdapter } from "../types/index.js";
 
 export interface ExplainReport {
@@ -52,9 +53,10 @@ export class QueryExplainer {
         }
       }
 
-      // Check if SELECT query lacks a LIMIT clause
-      const upper = trimmed.toUpperCase();
-      if (upper.startsWith("SELECT") && !upper.includes("LIMIT ") && !isIndexed) {
+      // Check if SELECT or CTE query lacks a LIMIT clause
+      const strippedUpper = stripSqlComments(trimmed).toUpperCase();
+      const isSelectOrCte = strippedUpper.startsWith("SELECT") || strippedUpper.startsWith("WITH");
+      if (isSelectOrCte && !strippedUpper.includes("LIMIT ") && !isIndexed) {
         bottlenecks.push("Unbounded full-table scan query lacks a LIMIT clause.");
         suggestions.push(
           "Add a LIMIT clause (e.g. LIMIT 50) to protect database memory and connection pool limits.",

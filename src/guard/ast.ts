@@ -23,6 +23,90 @@ export interface ParseResult {
   parseError?: string;
 }
 
+/**
+ * Safely strips single-line (-- ...) and multi-line (/* ... *\/) SQL comments,
+ * properly respecting single and double quoted string literals and escapes.
+ */
+export function stripSqlComments(sql: string): string {
+  if (!sql) return "";
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+  let result = "";
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      if (char === "\n" || char === "\r") {
+        inLineComment = false;
+        result += char;
+      }
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        i++; // skip /
+      }
+      continue;
+    }
+
+    if (inSingleQuote) {
+      result += char;
+      if (char === "'" && next === "'") {
+        result += next;
+        i++;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      result += char;
+      if (char === '"' && next === '"') {
+        result += next;
+        i++;
+      } else if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (char === "-" && next === "-") {
+      inLineComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      result += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      result += char;
+      continue;
+    }
+
+    result += char;
+  }
+
+  return result.trim();
+}
+
 function mapDialect(dialect: DatabaseDialect): string {
   switch (dialect) {
     case "sqlite":
@@ -37,12 +121,27 @@ function mapDialect(dialect: DatabaseDialect): string {
 }
 
 export function parseSql(sql: string, dialect: DatabaseDialect = "sqlite"): ParseResult {
+  const stripped = stripSqlComments(sql);
+  if (!stripped) {
+    return {
+      statements: [],
+      isMultiStatement: false,
+    };
+  }
+
   const parser = new ParserClass();
   const sqlDialect = mapDialect(dialect);
 
   try {
     const astResult = parser.astify(sql, { database: sqlDialect });
     const astList = Array.isArray(astResult) ? astResult : [astResult];
+
+    if (astList.length === 0) {
+      return {
+        statements: [],
+        isMultiStatement: false,
+      };
+    }
 
     const statements: ParsedStatement[] = astList.map((ast) => {
       const operation = determineOperation(ast);
@@ -71,8 +170,13 @@ export function parseSql(sql: string, dialect: DatabaseDialect = "sqlite"): Pars
 export function determineOperation(ast: unknown): SqlOperationType {
   if (!ast || typeof ast !== "object") return "UNKNOWN";
 
-  const node = ast as { type?: string };
+  const node = ast as { type?: string; stmt?: unknown; with?: unknown };
   const type = (node.type || "").toLowerCase();
+
+  // If top-level statement is a CTE container or wrapper
+  if ((!type || type === "with") && node.stmt) {
+    return determineOperation(node.stmt);
+  }
 
   switch (type) {
     case "select":
@@ -103,9 +207,26 @@ export function extractTables(ast: unknown): string[] {
     table?: Array<{ table?: string }> | { table?: string };
     from?: Array<{ table?: string }>;
     name?: Array<{ table?: string }>;
+    with?: Array<{ name?: { value?: string }; stmt?: { ast?: unknown } }>;
   };
 
   const tables = new Set<string>();
+  const cteNames = new Set<string>();
+
+  // Check CTE (WITH clauses) for underlying target tables
+  if (Array.isArray(node.with)) {
+    for (const w of node.with) {
+      if (w.name?.value) {
+        cteNames.add(w.name.value);
+      }
+      if (w?.stmt?.ast) {
+        const innerTables = extractTables(w.stmt.ast);
+        for (const it of innerTables) {
+          tables.add(it);
+        }
+      }
+    }
+  }
 
   // Check direct table property
   if (Array.isArray(node.table)) {
@@ -128,6 +249,12 @@ export function extractTables(ast: unknown): string[] {
     for (const n of node.name) {
       if (n?.table) tables.add(n.table);
     }
+  }
+
+  // Filter out temporary CTE aliases if real underlying tables exist
+  const nonCteTables = Array.from(tables).filter((t) => !cteNames.has(t));
+  if (nonCteTables.length > 0) {
+    return nonCteTables;
   }
 
   return Array.from(tables);

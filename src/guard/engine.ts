@@ -5,7 +5,7 @@ import type {
   RiskLevel,
   SqlOperationType,
 } from "../types/index.js";
-import { type ParsedStatement, parseSql } from "./ast.js";
+import { type ParsedStatement, parseSql, stripSqlComments } from "./ast.js";
 import { evaluateWhereClause } from "./tautology.js";
 
 export class SqlGuardEngine {
@@ -21,7 +21,8 @@ export class SqlGuardEngine {
 
   public evaluate(sql: string): GuardrailEvaluation {
     const trimmed = sql.trim();
-    if (!trimmed) {
+    const stripped = stripSqlComments(trimmed);
+    if (!trimmed || !stripped) {
       return {
         allowed: false,
         riskLevel: "BLOCKED",
@@ -31,7 +32,7 @@ export class SqlGuardEngine {
         violations: [
           {
             code: "EMPTY_QUERY",
-            message: "SQL statement is empty.",
+            message: "SQL statement is empty or contains only comments.",
             severity: "BLOCKED",
           },
         ],
@@ -47,6 +48,25 @@ export class SqlGuardEngine {
     }
 
     const { statements, isMultiStatement } = parseResult;
+
+    if (!statements || statements.length === 0) {
+      return {
+        allowed: false,
+        riskLevel: "BLOCKED",
+        riskScore: 60,
+        operation: "UNKNOWN",
+        targetTables: [],
+        violations: [
+          {
+            code: "EMPTY_QUERY",
+            message: "SQL statement is empty or contains only comments.",
+            severity: "BLOCKED",
+          },
+        ],
+        warnings: [],
+        requiresDryRun: false,
+      };
+    }
 
     // Check multi-statement security
     if (isMultiStatement) {
