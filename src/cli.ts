@@ -1,7 +1,7 @@
-#!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config/index.js";
+import { installClaude, installCursor } from "./configurator/index.js";
 import { createMcpServer } from "./server/index.js";
 
 const VERSION = "0.1.0";
@@ -15,10 +15,12 @@ const HELP_TEXT = `
     dbshield [command] [options]
 
   COMMANDS:
-    start       Launch the MCP server on stdio transport (default)
-    status      Inspect database connection and active security parameters
-    init        Generate a default dbshield.config.json in the current directory
-    help        Display this help message
+    start            Launch the MCP server on stdio transport (default)
+    status           Inspect database connection and active security parameters
+    init             Generate a default dbshield.config.json in the current directory
+    install-claude   Automatically configure Claude Desktop to use DBShield
+    install-cursor   Automatically configure Cursor (.cursor/mcp.json) to use DBShield
+    help             Display this help message
 
   OPTIONS:
     --dialect <sqlite|postgres|mysql>   Specify database dialect (default: sqlite)
@@ -107,6 +109,30 @@ Destructive DDL:   ${config.allowDestructiveDDL ? "ALLOWED" : "BLOCKED"}
       };
       await fs.writeFile(configPath, JSON.stringify(starterConfig, null, 2), "utf8");
       console.log(`✅ Created dbshield.config.json at ${configPath}`);
+      break;
+    }
+
+    case "install-claude": {
+      const result = await installClaude();
+      console.log(`
+🎉 Successfully configured Claude Desktop for DBShield!
+Config File: ${result.configPath}
+Status:      ${result.alreadyConfigured ? "Updated existing configuration" : "Added fresh configuration"}
+
+Restart Claude Desktop to start using DBShield database tools!
+`);
+      break;
+    }
+
+    case "install-cursor": {
+      const result = await installCursor();
+      console.log(`
+🎉 Successfully configured Cursor IDE for DBShield!
+Config File: ${result.configPath}
+Status:      ${result.alreadyConfigured ? "Updated existing configuration" : "Added fresh configuration"}
+
+Reload Cursor to activate DBShield tools in Agent mode!
+`);
       break;
     }
 

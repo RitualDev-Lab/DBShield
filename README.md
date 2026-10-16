@@ -42,27 +42,14 @@ When autonomous AI coding agents interact directly with databases:
 ## 📦 Quickstart
 
 ### 1. Claude Desktop Setup
-Add DBShield to your `claude_desktop_config.json`:
+### 1. Claude Desktop Setup (1-Click)
+Run the auto-installer to configure your local Claude Desktop:
 
-```json
-{
-  "mcpServers": {
-    "dbshield": {
-      "command": "npx",
-      "args": ["-y", "@ritualdev-lab/dbshield", "start"],
-      "env": {
-        "DBSHIELD_DIALECT": "sqlite",
-        "DBSHIELD_STORAGE_PATH": "./dev.db",
-        "DBSHIELD_SAFETY_TIER": "BALANCED"
-      }
-    }
-  }
-}
+```bash
+npx @ritualdev-lab/dbshield install-claude
 ```
 
-### 2. Cursor IDE Setup
-Add DBShield to your `.cursor/mcp.json`:
-
+Or manually add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
@@ -74,7 +61,14 @@ Add DBShield to your `.cursor/mcp.json`:
 }
 ```
 
-### 3. Terminal CLI
+### 2. Cursor IDE Setup (1-Click)
+Run inside your workspace to create or update `.cursor/mcp.json`:
+
+```bash
+npx @ritualdev-lab/dbshield install-cursor
+```
+
+### 3. Terminal CLI & Status
 ```bash
 # Check status and inspect connected database
 npx @ritualdev-lab/dbshield status
@@ -116,9 +110,11 @@ npx @ritualdev-lab/dbshield init
 |---|---|
 | `db_status` | Inspect gateway connectivity, active safety tier, and database statistics. |
 | `db_describe_schema` | Safe introspection of tables, columns, constraints, and relations. |
-| `db_query` | Safe read query execution with automatic PII redaction and row limits. *(Phase 2-4)* |
-| `db_dry_run` | Test mutation inside an auto-rollback transaction with row delta preview. *(Phase 3)* |
-| `db_commit` | Execute verified mutation accompanied by authorization token. *(Phase 3)* |
+| `db_query` | Safe read query execution with automatic PII redaction and row limits. |
+| `db_dry_run` | Test mutation inside an auto-rollback transaction with row delta preview. |
+| `db_commit` | Execute verified mutation accompanied by authorization token. |
+| `db_explain_query` | Analyze query execution plans, detect unindexed full-table scans, and receive index hints. |
+| `db_audit_log` | Retrieve compliance query audit trail, blocked operations, and risk scores. |
 
 ---
 
@@ -149,7 +145,12 @@ npx @ritualdev-lab/dbshield init
   - Zero-leak secret replacement (`[REDACTED_SECRET]`, `[REDACTED_TOKEN]`)
   - Automated compliance audit report headers injected into MCP `db_query` responses
   - Custom column overrides via `config.customPiiColumns`
-- [ ] **Phase 5: Full MCP Tool Suite & Cursor/Claude Auto-Configurator**
+- [x] **Phase 5: Full MCP Tool Suite & Cursor/Claude Auto-Configurator**
+  - `db_explain_query` query plan analysis with sequential scan & missing index alerts
+  - `db_audit_log` in-memory circular audit buffer with status & risk score filtering
+  - Interactive 1-click CLI configurators (`dbshield install-claude`, `dbshield install-cursor`)
+  - Cross-platform configuration file detection & graceful merging
+- [ ] **Phase 6: Comprehensive Testing, CI/CD & npm Release**
 - [ ] **Phase 6: Comprehensive Testing, CI/CD & npm Release**
 
 ---
