@@ -206,40 +206,5 @@ For production and shared environments, DBShield should be paired with database-
 
 ---
 
-## 🗺️ Project Roadmap & Enterprise Evolution
-
-- [x] **Phase 1: Multi-Engine Core & Native PostgreSQL Adapter**
-  - Universal `DatabaseAdapter` interface & connection pooling via `pg.Pool`
-  - Cloud database auto-SSL detection (Neon, Supabase, Render, AWS RDS)
-  - Two-phase commit execution with simulation delta drift protection
-  - Automated PostgreSQL catalog reflection (`information_schema`, `pg_indexes`)
-- [x] **Phase 2: Runaway Query Killer & Pre-Execution Cost Gate**
-  - Automated `EXPLAIN` query plan pre-flight cost evaluation
-  - Planner cost threshold blocking (`maxEstimatedCost`) & row scan limits (`maxEstimatedRows`)
-  - Full-table unindexed sequential scan interception in STRICT tier
-  - Automatic statement timeouts (`statementTimeoutMs`) terminating runaway queries
-- [x] **Phase 3: Non-Destructive Migration & Schema Drift Gate**
-  - Dangerous DDL interception (`ALTER TABLE ADD COLUMN NOT NULL` without default)
-  - PostgreSQL non-concurrent index locking alert (`CREATE INDEX CONCURRENTLY` enforcer)
-  - Instant breaking table/column rename prevention
-  - Foreign key cascade lock auditor (`db_check_schema_drift`)
-  - Automated zero-downtime expand-and-contract migration generator (`db_validate_migration`)
-- [x] **Phase 4: Semantic Intent vs. SQL AST Mismatch Gate**
-  - AI agent prompt intent vs. AST modified column keyword tokenizer
-  - Sensitive column protection across privilege (`role`, `is_admin`), financial (`balance`), and credential fields
-  - Tiered safety enforcement with customizable sensitive columns
-  - Dedicated intent alignment validation tool (`db_check_semantic_intent`)
-- [x] **Phase 5: Zero-Config PostgreSQL Wire-Protocol Proxy Mode**
-  - High-performance TCP wire proxy listening on `:5433` (or `:5432`)
-  - Native PostgreSQL Wire Protocol v3 parser/encoder (Simple Query `'Q'`, Parse `'P'`, ErrorResponse `'E'`)
-  - Intercepts unsafe traffic at the socket layer returning standard SQLSTATE `42501` errors
-  - Drop-in universal compatibility with Prisma, Drizzle, SQLAlchemy, TypeORM, and `psql`
-- [x] **Testing, Packaging & Quality Assurance**
-  - 115 / 115 passing unit and integration tests across all security layers
-  - 100% Biome linting and type-checked TypeScript compilation
-  - Zero unredacted PII leakage guarantee across query logs, audit trails, and database errors
-
----
-
 ## 📄 License
 MIT © [RitualDev Lab](https://github.com/RitualDev-Lab)
