@@ -1,7 +1,9 @@
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
+import { PostgresAdapter } from "./postgres.js";
 import { SqliteAdapter } from "./sqlite.js";
 
 export * from "./sqlite.js";
+export * from "./postgres.js";
 
 export function createDatabaseAdapter(config: DBShieldConfig): DatabaseAdapter {
   switch (config.dialect) {
@@ -12,10 +14,15 @@ export function createDatabaseAdapter(config: DBShieldConfig): DatabaseAdapter {
         config.maxRowsPerMutation,
       );
     case "postgres":
+      return new PostgresAdapter(
+        config.connectionString || process.env.DATABASE_URL || "postgres://localhost:5432/postgres",
+        config.maxRowsPerRead,
+        config.maxRowsPerMutation,
+      );
     case "mysql":
-      // Fallback or external driver adapter
+      // Fallback or upcoming driver adapter
       throw new Error(
-        `Dialect '${config.dialect}' driver will be enabled in multi-dialect packaging. Currently SQLite zero-config adapter is active.`,
+        `Dialect 'mysql' driver will be enabled in upcoming multi-dialect packaging. Native PostgreSQL and SQLite adapters are active.`,
       );
     default: {
       const unsupported = (config as { dialect: string }).dialect;
