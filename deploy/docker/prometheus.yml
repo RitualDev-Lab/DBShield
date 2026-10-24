@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "dbshield-proxy"
+    static_configs:
+      - targets: ["dbshield:9090"]
+        labels:
+          environment: "production"
+          service: "dbshield-wire-proxy"

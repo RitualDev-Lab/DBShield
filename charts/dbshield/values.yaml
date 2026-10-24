@@ -1,0 +1,120 @@
+# Default values for dbshield Helm chart.
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/ritualdev-lab/dbshield
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "0.2.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  fsGroup: 10001
+
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# DBShield Wire Proxy Configuration
+proxy:
+  listenPort: 5433
+  listenHost: "0.0.0.0"
+  upstreamHost: "postgres.default.svc.cluster.local"
+  upstreamPort: 5432
+  safetyTier: "BALANCED" # STRICT | BALANCED | PERMISSIVE
+  allowDestructiveDDL: false
+  enablePiiMasking: true
+  enableCostGate: true
+  enableMigrationGate: true
+  enableSemanticGuard: true
+  maxRowsPerMutation: 50
+  warnRowsPerMutation: 10
+  maxRowsPerRead: 500
+  statementTimeoutMs: 5000
+
+# Native Prometheus Metrics Exporter & Health Probes
+metrics:
+  enabled: true
+  port: 9090
+  host: "0.0.0.0"
+  serviceMonitor:
+    enabled: true
+    interval: 10s
+    scrapeTimeout: 5s
+    labels:
+      release: prometheus
+
+service:
+  type: ClusterIP
+  proxyPort: 5432       # Port exposed on the Service mapping to container 5433
+  metricsPort: 9090     # Prometheus scrape port
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: metrics
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 2
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - dbshield
+          topologyKey: kubernetes.io/hostname

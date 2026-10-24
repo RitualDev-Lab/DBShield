@@ -244,7 +244,9 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("SELECT id, name FROM users WHERE id = 1;"));
-      await new Promise((r) => setTimeout(r, 80));
+      for (let i = 0; i < 25 && receivedUpstreamQueries.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
 
       assert.equal(receivedUpstreamQueries.length, 1);
       assert.equal(receivedUpstreamQueries[0], "SELECT id, name FROM users WHERE id = 1;");
@@ -255,7 +257,9 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("DROP TABLE users;"));
-      await new Promise((r) => setTimeout(r, 80));
+      for (let i = 0; i < 25 && receivedClientPackets.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
 
       // Must NOT reach upstream PostgreSQL
       assert.equal(receivedUpstreamQueries.length, 0);
@@ -276,7 +280,9 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("UPDATE users SET is_active = true;"));
-      await new Promise((r) => setTimeout(r, 80));
+      for (let i = 0; i < 25 && receivedClientPackets.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
 
       assert.equal(receivedUpstreamQueries.length, 0); // Blocked before upstream
       const errUnconstrained = parseErrorResponseBody(Buffer.concat(receivedClientPackets));
@@ -287,7 +293,9 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       client.write(buildParsePacket("stmt_bad", "TRUNCATE TABLE accounts;"));
       client.write(buildSyncPacket());
-      await new Promise((r) => setTimeout(r, 80));
+      for (let i = 0; i < 25 && receivedClientPackets.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
 
       const errParse = parseErrorResponseBody(Buffer.concat(receivedClientPackets));
       assert.equal(errParse.C, "42501");

@@ -2,6 +2,7 @@ import net from "node:net";
 import { AuditLogger } from "../audit/index.js";
 import { DEFAULT_CONFIG } from "../config/index.js";
 import { SqlGuardEngine } from "../guard/engine.js";
+import { type MetricsRegistry, MetricsServer, getGlobalMetrics } from "../metrics/index.js";
 import { MigrationSafetyEngine } from "../migration/index.js";
 import { SemanticIntentGuard } from "../semantic/index.js";
 import type { DBShieldConfig } from "../types/index.js";
@@ -21,6 +22,10 @@ export interface PostgresWireProxyOptions {
   config?: DBShieldConfig;
   logger?: AuditLogger;
   verbose?: boolean;
+  enableMetrics?: boolean;
+  metricsPort?: number;
+  metricsHost?: string;
+  metricsRegistry?: MetricsRegistry;
 }
 
 export interface ProxyStats {
@@ -39,12 +44,17 @@ export class PostgresWireProxy {
   private sqlGuard: SqlGuardEngine;
   private migrationGuard: MigrationSafetyEngine;
   private semanticGuard: SemanticIntentGuard;
+  private metricsServer: MetricsServer | null = null;
+  private metricsRegistry: MetricsRegistry;
 
   public readonly listenPort: number;
   public readonly listenHost: string;
   public readonly upstreamHost: string;
   public readonly upstreamPort: number;
   public readonly verbose: boolean;
+  public readonly enableMetrics: boolean;
+  public readonly metricsPort: number;
+  public readonly metricsHost: string;
 
   private stats: ProxyStats = {
     activeConnections: 0,
@@ -61,6 +71,10 @@ export class PostgresWireProxy {
     this.upstreamHost = options.upstreamHost ?? "127.0.0.1";
     this.upstreamPort = options.upstreamPort ?? 5432;
     this.verbose = options.verbose ?? false;
+    this.enableMetrics = options.enableMetrics ?? this.config.enableMetrics ?? false;
+    this.metricsPort = options.metricsPort ?? this.config.metricsPort ?? 9090;
+    this.metricsHost = options.metricsHost ?? this.config.metricsHost ?? "0.0.0.0";
+    this.metricsRegistry = options.metricsRegistry || getGlobalMetrics();
 
     this.logger = options.logger || new AuditLogger(this.config.auditLogPath);
     this.sqlGuard = new SqlGuardEngine(this.config);
@@ -76,6 +90,21 @@ export class PostgresWireProxy {
    * Start listening on TCP port for incoming PostgreSQL client connections.
    */
   public async start(): Promise<void> {
+    if (this.enableMetrics) {
+      this.metricsServer = new MetricsServer({
+        port: this.metricsPort,
+        host: this.metricsHost,
+        registry: this.metricsRegistry,
+        proxyInfo: {
+          listenPort: this.listenPort,
+          upstreamHost: this.upstreamHost,
+          upstreamPort: this.upstreamPort,
+          safetyTier: this.config.safetyTier,
+        },
+      });
+      await this.metricsServer.start();
+    }
+
     return new Promise((resolve, reject) => {
       this.server = net.createServer((clientSocket) => {
         this.handleClientConnection(clientSocket);
@@ -96,6 +125,11 @@ export class PostgresWireProxy {
    * Stop the proxy server and close all sockets.
    */
   public async stop(): Promise<void> {
+    if (this.metricsServer) {
+      await this.metricsServer.stop();
+      this.metricsServer = null;
+    }
+
     for (const s of this.activeSockets) {
       if (!s.destroyed) s.destroy();
     }
@@ -122,6 +156,8 @@ export class PostgresWireProxy {
   private handleClientConnection(clientSocket: net.Socket): void {
     this.stats.activeConnections++;
     this.stats.totalConnections++;
+    this.metricsRegistry.connectionsActive.inc();
+    this.metricsRegistry.connectionsTotal.inc();
     this.activeSockets.add(clientSocket);
 
     if (this.verbose) {
@@ -142,6 +178,7 @@ export class PostgresWireProxy {
 
     clientSocket.on("close", () => {
       this.activeSockets.delete(clientSocket);
+      this.metricsRegistry.connectionsActive.dec();
       if (this.verbose) {
         console.log("🔌 [DISCONNECT] Client disconnected");
       }
@@ -235,11 +272,37 @@ export class PostgresWireProxy {
           }
 
           // Evaluate SQL with DBShield guardrails
+          const startTime = Date.now();
           const evaluation = this.evaluateQuery(sql);
+          const durationSec = (Date.now() - startTime) / 1000;
+          this.metricsRegistry.queryDurationSeconds.observe(durationSec, {
+            operation: evaluation.operation,
+          });
 
           if (!evaluation.allowed) {
             this.stats.queriesIntercepted++;
             inErrorState = message.type === "Parse";
+            const primaryViolation = evaluation.violations[0];
+            const ruleCode = primaryViolation?.code || "BLOCKED";
+
+            this.metricsRegistry.queriesTotal.inc({
+              status: "blocked",
+              safety_tier: this.config.safetyTier,
+              operation: evaluation.operation,
+            });
+            this.metricsRegistry.queriesBlockedTotal.inc({
+              rule: ruleCode,
+              severity: evaluation.riskLevel,
+            });
+
+            // Estimated cloud infrastructure savings
+            const savings =
+              evaluation.operation === "DDL_DROP" || evaluation.operation === "DDL_TRUNCATE"
+                ? 100
+                : evaluation.operation === "UPDATE" || evaluation.operation === "DELETE"
+                  ? 50
+                  : 10;
+            this.metricsRegistry.costSavingsDollarsTotal.inc(undefined, savings);
 
             // Log security event
             this.logger.log({
@@ -254,7 +317,6 @@ export class PostgresWireProxy {
             });
 
             // Return native PostgreSQL ErrorResponse packet
-            const primaryViolation = evaluation.violations[0];
             if (this.verbose) {
               console.error(
                 `🛑 [INTERCEPTED] ${evaluation.operation} on [${evaluation.targetTables.join(", ") || "table"}]: ${primaryViolation?.message || "Policy violation"}`,
@@ -282,6 +344,11 @@ export class PostgresWireProxy {
 
           // Query is allowed
           this.stats.queriesAllowed++;
+          this.metricsRegistry.queriesTotal.inc({
+            status: "allowed",
+            safety_tier: this.config.safetyTier,
+            operation: evaluation.operation,
+          });
           if (this.verbose) {
             const preview = sql.trim().replace(/\s+/g, " ");
             console.log(

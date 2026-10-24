@@ -192,6 +192,9 @@ export interface DBShieldConfig {
   proxyHost?: string; // Host for PostgreSQL TCP wire proxy (default "127.0.0.1")
   upstreamHost?: string; // Upstream target PostgreSQL host (default "127.0.0.1")
   upstreamPort?: number; // Upstream target PostgreSQL port (default 5432)
+  metricsPort?: number; // Prometheus metrics & health HTTP port (default 9090)
+  metricsHost?: string; // Prometheus metrics & health HTTP host (default "0.0.0.0")
+  enableMetrics?: boolean; // Enable Prometheus metrics exporter (default true)
 }
 
 export interface DatabaseAdapter {

@@ -12,3 +12,4 @@ export * from "./semantic/index.js";
 export * from "./proxy/index.js";
 export * from "./configurator/index.js";
 export * from "./server/index.js";
+export * from "./metrics/index.js";

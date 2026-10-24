@@ -1,0 +1,21 @@
+apiVersion: v2
+name: dbshield
+description: Enterprise Database Wire Proxy, AI Safety Guardrail & Prometheus Metrics Exporter
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+keywords:
+  - database
+  - postgres
+  - proxy
+  - security
+  - guardrail
+  - prometheus
+  - kubernetes
+home: https://github.com/RitualDev-Lab/DBShield
+sources:
+  - https://github.com/RitualDev-Lab/DBShield
+maintainers:
+  - name: RitualDev Lab
+    email: team@ritualdev.com
+    url: https://github.com/RitualDev-Lab

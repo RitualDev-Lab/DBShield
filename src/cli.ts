@@ -6,7 +6,7 @@ import { installClaude, installCursor } from "./configurator/index.js";
 import { PostgresWireProxy } from "./proxy/index.js";
 import { createMcpServer } from "./server/index.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const HELP_TEXT = `
   🛡️  DBShield - Database Guardrail & Sandboxing MCP Server v${VERSION}
@@ -32,6 +32,9 @@ const HELP_TEXT = `
     --port <number>                     Proxy listen port (default: 5433)
     --upstream-host <host>              Upstream PostgreSQL host (default: 127.0.0.1)
     --upstream-port <port>              Upstream PostgreSQL port (default: 5432)
+    --metrics-port <number>             Prometheus metrics exporter port (default: 9090)
+    --metrics-host <host>               Prometheus metrics listen host (default: 0.0.0.0)
+    --no-metrics                        Disable Prometheus metrics exporter
     --version, -v                       Display DBShield version
     --help, -h                          Display this help message
 
@@ -96,6 +99,20 @@ async function main() {
           ? Number.parseInt(args[uPortIdx + 1], 10)
           : config.upstreamPort || 5432;
 
+      const mPortIdx = args.indexOf("--metrics-port");
+      const metricsPort =
+        mPortIdx !== -1 && args[mPortIdx + 1]
+          ? Number.parseInt(args[mPortIdx + 1], 10)
+          : config.metricsPort || 9090;
+
+      const mHostIdx = args.indexOf("--metrics-host");
+      const metricsHost =
+        mHostIdx !== -1 && args[mHostIdx + 1]
+          ? args[mHostIdx + 1]
+          : config.metricsHost || "0.0.0.0";
+
+      const enableMetrics = !args.includes("--no-metrics") && config.enableMetrics !== false;
+
       console.log(`
 🛡️  DBShield PostgreSQL Wire-Protocol Proxy
 ──────────────────────────────────────────
@@ -106,6 +123,8 @@ AST Safety Gate:   ENABLED
 Cost Gate:         ${config.enableCostGate ? "ENABLED" : "DISABLED"}
 Migration Gate:    ${config.enableMigrationGate ? "ENABLED" : "DISABLED"}
 Semantic Guard:    ${config.enableSemanticGuard ? "ENABLED" : "DISABLED"}
+Prometheus Metrics:${enableMetrics ? ` ENABLED (http://${metricsHost}:${metricsPort}/metrics)` : " DISABLED"}
+Health Probe:      ${enableMetrics ? ` ENABLED (http://${metricsHost}:${metricsPort}/healthz)` : " DISABLED"}
 
 Connect your ORMs or AI agents directly:
   DATABASE_URL="postgres://user:pass@127.0.0.1:${listenPort}/dbname"
@@ -115,6 +134,9 @@ Connect your ORMs or AI agents directly:
         listenPort,
         upstreamHost,
         upstreamPort,
+        enableMetrics,
+        metricsPort,
+        metricsHost,
         config,
         verbose: true,
       });

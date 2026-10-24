@@ -1,0 +1,71 @@
+services:
+  # Upstream Target PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: dbshield-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: dbuser
+      POSTGRES_PASSWORD: secretpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbuser -d appdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # DBShield Wire Proxy & Safety Firewall
+  dbshield:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/ritualdev-lab/dbshield:0.2.0
+    container_name: dbshield-proxy
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DBSHIELD_SAFETY_TIER: BALANCED
+      DBSHIELD_UPSTREAM_HOST: db
+      DBSHIELD_UPSTREAM_PORT: "5432"
+      DBSHIELD_PROXY_PORT: "5433"
+      DBSHIELD_PROXY_HOST: "0.0.0.0"
+      DBSHIELD_METRICS_PORT: "9090"
+      DBSHIELD_METRICS_HOST: "0.0.0.0"
+      DBSHIELD_ENABLE_METRICS: "true"
+      DBSHIELD_ENABLE_COST_GATE: "true"
+      DBSHIELD_ENABLE_MIGRATION_GATE: "true"
+      DBSHIELD_ENABLE_SEMANTIC_GUARD: "true"
+      DBSHIELD_ALLOW_DESTRUCTIVE_DDL: "false"
+    ports:
+      - "5433:5433" # PostgreSQL Wire Proxy Endpoint
+      - "9090:9090" # Prometheus Metrics & Kubernetes Health Check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9090/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+
+  # Prometheus Telemetry & Alerting Scraper
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: dbshield-prometheus
+    restart: unless-stopped
+    depends_on:
+      dbshield:
+        condition: service_healthy
+    volumes:
+      - ./deploy/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090" # Prometheus Web Dashboard on localhost:9091
+
+volumes:
+  pgdata:

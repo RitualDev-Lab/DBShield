@@ -1,0 +1,15 @@
+1. DBShield Wire Proxy has been successfully deployed!
+
+   Get the Service address by running:
+     export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "dbshield.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+     export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+     echo "Forwarding PostgreSQL Wire Proxy to localhost:5432..."
+     kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 5432:$CONTAINER_PORT
+
+2. Connect your AI Agents (Cursor, Claude, Antigravity) or PostgreSQL ORMs:
+     psql "postgres://<user>:<password>@127.0.0.1:5432/<database>"
+
+3. Scrape Prometheus Metrics & Health:
+     kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 9090:9090
+     curl http://localhost:9090/metrics
+     curl http://localhost:9090/healthz

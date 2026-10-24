@@ -104,7 +104,7 @@ test("DBShield CLI - Help and Version Flags", () => {
   const versionOutput = execSync(`"${process.execPath}" "${cliPath}" --version`, {
     encoding: "utf8",
   });
-  assert.ok(versionOutput.includes("dbshield v0.1.0"));
+  assert.ok(versionOutput.includes("dbshield v0.2.0"));
 
   const helpOutput = execSync(`"${process.execPath}" "${cliPath}" --help`, { encoding: "utf8" });
   assert.ok(helpOutput.includes("DBShield - Database Guardrail & Sandboxing MCP Server"));

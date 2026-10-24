@@ -32,6 +32,9 @@ export const ConfigSchema = z.object({
   proxyHost: z.string().default("127.0.0.1"),
   upstreamHost: z.string().default("127.0.0.1"),
   upstreamPort: z.number().int().positive().default(5432),
+  metricsPort: z.number().int().positive().default(9090),
+  metricsHost: z.string().default("0.0.0.0"),
+  enableMetrics: z.boolean().default(true),
 });
 
 export const DEFAULT_CONFIG: DBShieldConfig = {
@@ -61,6 +64,9 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   proxyHost: "127.0.0.1",
   upstreamHost: "127.0.0.1",
   upstreamPort: 5432,
+  metricsPort: 9090,
+  metricsHost: "0.0.0.0",
+  enableMetrics: true,
 };
 
 export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
@@ -149,6 +155,15 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   }
   if (process.env.DBSHIELD_UPSTREAM_PORT) {
     envConfig.upstreamPort = Number.parseInt(process.env.DBSHIELD_UPSTREAM_PORT, 10);
+  }
+  if (process.env.DBSHIELD_METRICS_PORT) {
+    envConfig.metricsPort = Number.parseInt(process.env.DBSHIELD_METRICS_PORT, 10);
+  }
+  if (process.env.DBSHIELD_METRICS_HOST) {
+    envConfig.metricsHost = process.env.DBSHIELD_METRICS_HOST;
+  }
+  if (process.env.DBSHIELD_ENABLE_METRICS) {
+    envConfig.enableMetrics = process.env.DBSHIELD_ENABLE_METRICS !== "false";
   }
 
   const merged = {

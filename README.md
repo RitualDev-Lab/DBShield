@@ -9,6 +9,9 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0-green.svg)](https://nodejs.org/)
 [![CI](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml/badge.svg)](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml)
+[![Docker Image](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
+[![Helm Chart](https://img.shields.io/badge/Helm-v0.2.0-0F1689.svg?logo=helm&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
+[![Prometheus](https://img.shields.io/badge/Prometheus-Metrics%20Exporter-E6522C.svg?logo=prometheus&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
 [![Biome](https://img.shields.io/badge/Code%20Style-Biome-60a5fa.svg)](https://biomejs.dev)
 
 *Protect your databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.*
@@ -203,6 +206,63 @@ For production and shared environments, DBShield should be paired with database-
 ### 3. Policy Enforcement vs Human Approval
 - **Deterministic Policy Enforcement**: DBShield's dry-run authorization token guarantees that a query adheres to automated safety policies (blast radius thresholds, tautology checks, parameter binding).
 - **Human Approval Hand-Off**: In sensitive production workflows, `db_dry_run` outputs can be piped to an external human-in-the-loop review system (Slack, Teams, or ticketing webhook) before the token is submitted to `db_commit`.
+
+---
+
+## 🐳 Docker & Kubernetes Helm Packaging
+
+DBShield is packaged as an enterprise container with an unprivileged non-root user (`UID 10001`), native Prometheus metrics exporter, and a production Kubernetes Helm chart:
+
+```
+PostgreSQL Clients / AI Agents ──► DBShield Wire Proxy (:5433) ──► Upstream PostgreSQL (:5432)
+                                             │
+                                             └──► Prometheus Scraper (:9090/metrics)
+                                             └──► Kubernetes Probes (:9090/healthz, /ready)
+```
+
+### 1. Docker Compose (Zero-Config Full Stack)
+Launch PostgreSQL, DBShield Wire Proxy, and Prometheus in one command:
+
+```bash
+docker compose up -d
+```
+
+* **PostgreSQL Proxy**: `127.0.0.1:5433` (Targeting PostgreSQL on `:5432`)
+* **Prometheus Dashboard**: `http://localhost:9091`
+* **Metrics Endpoint**: `http://localhost:9090/metrics`
+* **Health Endpoint**: `http://localhost:9090/healthz`
+
+### 2. Standalone Docker Container
+```bash
+docker run -d \
+  --name dbshield-proxy \
+  -p 5433:5433 \
+  -p 9090:9090 \
+  -e DBSHIELD_UPSTREAM_HOST=postgres.internal \
+  -e DBSHIELD_UPSTREAM_PORT=5432 \
+  -e DBSHIELD_SAFETY_TIER=BALANCED \
+  ghcr.io/ritualdev-lab/dbshield:0.2.0
+```
+
+### 3. Kubernetes Deployment via Helm
+Deploy high-availability DBShield replicas (with HorizontalPodAutoscaler and Prometheus ServiceMonitor):
+
+```bash
+# Add or install local chart
+helm install dbshield ./charts/dbshield \
+  --set proxy.upstreamHost="my-db.postgres.database.azure.com" \
+  --set proxy.safetyTier="BALANCED" \
+  --set replicaCount=2 \
+  --set autoscaling.enabled=true
+```
+
+#### Metrics Exponent in Prometheus (`/metrics`)
+* `dbshield_up`: Proxy health status (1 = healthy)
+* `dbshield_connections_active`: Real-time active client connections
+* `dbshield_queries_total{status, safety_tier, operation}`: Total queries evaluated
+* `dbshield_queries_blocked_total{rule, severity}`: Queries intercepted and prevented
+* `dbshield_query_duration_seconds`: Histogram measuring query evaluation latency
+* `dbshield_cost_savings_dollars_total`: Estimated cloud spend saved from blocked runaway queries
 
 ---
 

@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dbshield.fullname" . }}-config
+  labels:
+    {{- include "dbshield.labels" . | nindent 4 }}
+data:
+  DBSHIELD_PROXY_HOST: {{ .Values.proxy.listenHost | quote }}
+  DBSHIELD_PROXY_PORT: {{ .Values.proxy.listenPort | quote }}
+  DBSHIELD_UPSTREAM_HOST: {{ .Values.proxy.upstreamHost | quote }}
+  DBSHIELD_UPSTREAM_PORT: {{ .Values.proxy.upstreamPort | quote }}
+  DBSHIELD_SAFETY_TIER: {{ .Values.proxy.safetyTier | quote }}
+  DBSHIELD_ALLOW_DESTRUCTIVE_DDL: {{ .Values.proxy.allowDestructiveDDL | quote }}
+  DBSHIELD_ENABLE_PII_MASKING: {{ .Values.proxy.enablePiiMasking | quote }}
+  DBSHIELD_ENABLE_COST_GATE: {{ .Values.proxy.enableCostGate | quote }}
+  DBSHIELD_ENABLE_MIGRATION_GATE: {{ .Values.proxy.enableMigrationGate | quote }}
+  DBSHIELD_ENABLE_SEMANTIC_GUARD: {{ .Values.proxy.enableSemanticGuard | quote }}
+  DBSHIELD_MAX_ROWS_PER_MUTATION: {{ .Values.proxy.maxRowsPerMutation | quote }}
+  DBSHIELD_WARN_ROWS_PER_MUTATION: {{ .Values.proxy.warnRowsPerMutation | quote }}
+  DBSHIELD_MAX_ROWS_PER_READ: {{ .Values.proxy.maxRowsPerRead | quote }}
+  DBSHIELD_STATEMENT_TIMEOUT_MS: {{ .Values.proxy.statementTimeoutMs | quote }}
+  DBSHIELD_ENABLE_METRICS: {{ .Values.metrics.enabled | quote }}
+  DBSHIELD_METRICS_HOST: {{ .Values.metrics.host | quote }}
+  DBSHIELD_METRICS_PORT: {{ .Values.metrics.port | quote }}
