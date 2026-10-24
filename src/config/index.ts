@@ -25,6 +25,9 @@ export const ConfigSchema = z.object({
   enableMigrationGate: z.boolean().default(true),
   enforceConcurrentIndexCreation: z.boolean().default(false),
   disallowBreakingRenames: z.boolean().default(true),
+  enableSemanticGuard: z.boolean().default(true),
+  customSensitiveColumns: z.array(z.string()).default([]),
+  requireIntentForSensitiveColumns: z.boolean().default(false),
 });
 
 export const DEFAULT_CONFIG: DBShieldConfig = {
@@ -47,6 +50,9 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   enableMigrationGate: true,
   enforceConcurrentIndexCreation: false,
   disallowBreakingRenames: true,
+  enableSemanticGuard: true,
+  customSensitiveColumns: [],
+  requireIntentForSensitiveColumns: false,
 };
 
 export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
@@ -117,6 +123,13 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   if (process.env.DBSHIELD_DISALLOW_BREAKING_RENAMES) {
     envConfig.disallowBreakingRenames = process.env.DBSHIELD_DISALLOW_BREAKING_RENAMES !== "false";
   }
+  if (process.env.DBSHIELD_ENABLE_SEMANTIC_GUARD) {
+    envConfig.enableSemanticGuard = process.env.DBSHIELD_ENABLE_SEMANTIC_GUARD !== "false";
+  }
+  if (process.env.DBSHIELD_REQUIRE_INTENT_FOR_SENSITIVE) {
+    envConfig.requireIntentForSensitiveColumns =
+      process.env.DBSHIELD_REQUIRE_INTENT_FOR_SENSITIVE === "true";
+  }
 
   const merged = {
     ...DEFAULT_CONFIG,
@@ -182,6 +195,15 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   if (!fileConfig.disallowBreakingRenames && !envConfig.disallowBreakingRenames) {
     if (merged.safetyTier === "PERMISSIVE") {
       merged.disallowBreakingRenames = false;
+    }
+  }
+
+  if (
+    fileConfig.requireIntentForSensitiveColumns === undefined &&
+    envConfig.requireIntentForSensitiveColumns === undefined
+  ) {
+    if (merged.safetyTier === "STRICT") {
+      merged.requireIntentForSensitiveColumns = true;
     }
   }
 

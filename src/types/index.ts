@@ -150,6 +150,19 @@ export interface SchemaDriftReport {
   unindexedForeignKeys: Array<{ table: string; column: string; referencedTable: string }>;
 }
 
+export interface SemanticEvaluationResult {
+  allowed: boolean;
+  blocked: boolean;
+  code?: "SEMANTIC_INTENT_MISMATCH" | "INTENT_REQUIRED_FOR_SENSITIVE_COLUMNS";
+  riskLevel: RiskLevel;
+  modifiedColumns: string[];
+  sensitiveColumnsTouched: string[];
+  unauthorizedColumns: string[];
+  statedIntent?: string;
+  warnings: string[];
+  suggestion?: string;
+}
+
 export interface DBShieldConfig {
   dialect: DatabaseDialect;
   connectionString?: string;
@@ -172,6 +185,9 @@ export interface DBShieldConfig {
   enableMigrationGate: boolean; // Phase 3: Migration safety and schema drift gate (default true)
   enforceConcurrentIndexCreation: boolean; // Require CREATE INDEX CONCURRENTLY in Postgres (default true in STRICT, false in BALANCED)
   disallowBreakingRenames: boolean; // Block table/column renames without zero-downtime expand-contract (default true in STRICT and BALANCED)
+  enableSemanticGuard: boolean; // Phase 4: Stated intent vs SQL AST mismatch gate (default true)
+  customSensitiveColumns?: string[]; // Custom sensitive column names to protect (e.g. ['kyc_status', 'discount'])
+  requireIntentForSensitiveColumns: boolean; // Require explicit intent when mutating sensitive fields (default true in STRICT, false in BALANCED)
 }
 
 export interface DatabaseAdapter {

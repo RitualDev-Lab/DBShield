@@ -11,6 +11,7 @@ import { SqlGuardEngine } from "../guard/index.js";
 import { MigrationSafetyEngine } from "../migration/index.js";
 import { type PiiRedactionReport, PiiRedactor } from "../pii/index.js";
 import { SandboxEngine } from "../sandbox/index.js";
+import { SemanticIntentGuard } from "../semantic/index.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
 
 export interface McpServerInstance {
@@ -24,6 +25,7 @@ export interface McpServerInstance {
   explainer: QueryExplainer;
   costGateEngine: CostGateEngine;
   migrationEngine: MigrationSafetyEngine;
+  semanticGuard: SemanticIntentGuard;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -44,6 +46,7 @@ export async function createMcpServer(
   const explainer = new QueryExplainer(adapter);
   const costGateEngine = new CostGateEngine(config, explainer);
   const migrationEngine = new MigrationSafetyEngine(config);
+  const semanticGuard = new SemanticIntentGuard(config);
 
   const server = new McpServer({
     name: "dbshield",
@@ -74,6 +77,8 @@ export async function createMcpServer(
                 statementTimeoutMs: config.statementTimeoutMs,
                 migrationGateEnabled: config.enableMigrationGate,
                 enforceConcurrentIndexCreation: config.enforceConcurrentIndexCreation,
+                semanticGuardEnabled: config.enableSemanticGuard,
+                requireIntentForSensitiveColumns: config.requireIntentForSensitiveColumns,
                 maxRowsPerMutation: config.maxRowsPerMutation,
                 maxRowsPerRead: config.maxRowsPerRead,
                 allowDestructiveDDL: config.allowDestructiveDDL,
@@ -144,8 +149,14 @@ export async function createMcpServer(
         .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
         .optional()
         .describe("Optional parameterized query values."),
+      intent: z
+        .string()
+        .optional()
+        .describe(
+          "Stated user-facing instruction or business justification for the SQL query. Required in STRICT tier when modifying sensitive fields.",
+        ),
     },
-    async ({ sql, params }) => {
+    async ({ sql, params, intent }) => {
       const evaluation = guardEngine.evaluate(sql);
 
       if (!evaluation.allowed) {
@@ -271,6 +282,56 @@ export async function createMcpServer(
         }
       }
 
+      // Phase 4: Semantic Intent vs SQL AST Mismatch Gate
+      let semanticWarnings: string[] = [];
+      if (
+        config.enableSemanticGuard &&
+        (evaluation.operation === "UPDATE" || evaluation.operation === "INSERT")
+      ) {
+        const semanticEval = semanticGuard.evaluate(sql, intent);
+        if (!semanticEval.allowed) {
+          await auditLogger.log({
+            auditId: randomUUID(),
+            timestamp: new Date().toISOString(),
+            sql,
+            operation: evaluation.operation,
+            status: "BLOCKED",
+            riskLevel: semanticEval.riskLevel,
+            riskScore: 90,
+            violations: [semanticEval.code || "SEMANTIC_INTENT_MISMATCH"],
+          });
+
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "BLOCKED",
+                    blockedBy: "DBShield Semantic Intent Guard",
+                    code: semanticEval.code,
+                    riskLevel: semanticEval.riskLevel,
+                    operation: evaluation.operation,
+                    targetTables: evaluation.targetTables,
+                    modifiedColumns: semanticEval.modifiedColumns,
+                    sensitiveColumnsTouched: semanticEval.sensitiveColumnsTouched,
+                    unauthorizedColumns: semanticEval.unauthorizedColumns,
+                    statedIntent: intent,
+                    suggestion:
+                      semanticEval.suggestion ||
+                      "The generated SQL modifies sensitive privilege/financial columns that were not authorized by the stated intent.",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+        semanticWarnings = semanticEval.warnings;
+      }
+
       // Phase 2: Pre-Execution Cost & Runaway Query Interception
       const costEvaluation = await costGateEngine.evaluate(sql, params);
       if (!costEvaluation.allowed) {
@@ -340,7 +401,11 @@ export async function createMcpServer(
           piiRedacted: (piiReport?.totalFieldsRedacted || 0) > 0,
         });
 
-        const combinedWarnings = [...evaluation.warnings, ...costEvaluation.warnings];
+        const combinedWarnings = [
+          ...evaluation.warnings,
+          ...costEvaluation.warnings,
+          ...semanticWarnings,
+        ];
 
         return {
           content: [
@@ -435,8 +500,53 @@ export async function createMcpServer(
         .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
         .optional()
         .describe("Optional parameterized query values."),
+      intent: z
+        .string()
+        .optional()
+        .describe("Optional stated prompt intent or business justification for the mutation."),
     },
-    async ({ sql, params }) => {
+    async ({ sql, params, intent }) => {
+      // Phase 4: Semantic Intent vs SQL AST Mismatch Gate
+      if (config.enableSemanticGuard) {
+        const semanticEval = semanticGuard.evaluate(sql, intent);
+        if (!semanticEval.allowed) {
+          await auditLogger.log({
+            auditId: randomUUID(),
+            timestamp: new Date().toISOString(),
+            sql,
+            operation: "UPDATE",
+            status: "DRY_RUN_REJECTED",
+            riskLevel: semanticEval.riskLevel,
+            riskScore: 90,
+            violations: [semanticEval.code || "SEMANTIC_INTENT_MISMATCH"],
+          });
+
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "DRY_RUN_REJECTED",
+                    safe: false,
+                    blockedBy: "DBShield Semantic Intent Guard",
+                    code: semanticEval.code,
+                    unauthorizedColumns: semanticEval.unauthorizedColumns,
+                    statedIntent: intent,
+                    instruction:
+                      semanticEval.suggestion ||
+                      "The simulated mutation modifies sensitive columns not authorized by the stated intent.",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+      }
+
       const dryRunRes = await sandboxEngine.dryRun(sql, params);
 
       await auditLogger.log({
@@ -743,6 +853,43 @@ export async function createMcpServer(
     },
   );
 
+  // Phase 4: Semantic Intent Alignment Checker Tool
+  server.tool(
+    "db_check_semantic_intent",
+    "Compare stated user prompt intent against SQL AST target columns to detect unauthorized modification of sensitive privilege, financial, or credential columns.",
+    {
+      sql: z.string().describe("The SQL query to check."),
+      intent: z.string().optional().describe("The stated prompt intent or instruction."),
+    },
+    async ({ sql, intent }) => {
+      const evaluation = semanticGuard.evaluate(sql, intent);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: evaluation.allowed ? "ALIGNED" : "MISMATCH",
+                allowed: evaluation.allowed,
+                blocked: evaluation.blocked,
+                code: evaluation.code,
+                riskLevel: evaluation.riskLevel,
+                modifiedColumns: evaluation.modifiedColumns,
+                sensitiveColumnsTouched: evaluation.sensitiveColumnsTouched,
+                unauthorizedColumns: evaluation.unauthorizedColumns,
+                statedIntent: evaluation.statedIntent,
+                warnings: evaluation.warnings,
+                suggestion: evaluation.suggestion,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
   return {
     server,
     adapter,
@@ -754,6 +901,7 @@ export async function createMcpServer(
     explainer,
     costGateEngine,
     migrationEngine,
+    semanticGuard,
     async start() {
       const transport = new StdioServerTransport();
       await server.connect(transport);

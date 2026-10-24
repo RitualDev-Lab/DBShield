@@ -8,5 +8,6 @@ export * from "./audit/index.js";
 export * from "./explain/index.js";
 export * from "./cost/index.js";
 export * from "./migration/index.js";
+export * from "./semantic/index.js";
 export * from "./configurator/index.js";
 export * from "./server/index.js";
