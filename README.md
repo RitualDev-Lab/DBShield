@@ -42,7 +42,6 @@ When autonomous AI coding agents interact directly with databases:
 
 ## 📦 Quickstart
 
-### 1. Claude Desktop Setup
 ### 1. Claude Desktop Setup (1-Click)
 Run the auto-installer to configure your local Claude Desktop:
 
@@ -69,7 +68,19 @@ Run inside your workspace to create or update `.cursor/mcp.json`:
 npx @ritualdev-lab/dbshield install-cursor
 ```
 
-### 3. Terminal CLI & Status
+### 3. PostgreSQL Wire-Protocol Proxy (Zero Client Config)
+Run DBShield as a transparent TCP wire proxy on `:5433` (or `:5432`). Any ORM (Prisma, Drizzle, SQLAlchemy), AI agent, or CLI connects directly:
+
+```bash
+npx @ritualdev-lab/dbshield proxy --port 5433 --upstream-host 127.0.0.1 --upstream-port 5432
+```
+
+In your application or `.env`:
+```env
+DATABASE_URL="postgres://user:password@127.0.0.1:5433/production_db"
+```
+
+### 4. Terminal CLI & Status
 ```bash
 # Check status and inspect connected database
 npx @ritualdev-lab/dbshield status
@@ -109,13 +120,16 @@ npx @ritualdev-lab/dbshield init
 
 | Tool | Description |
 |---|---|
-| `db_status` | Inspect gateway connectivity, active safety tier, and database statistics. |
+| `db_status` | Inspect gateway connectivity, active safety tier, cost gate, and database statistics. |
 | `db_describe_schema` | Safe introspection of tables, columns, constraints, and relations. |
-| `db_query` | Safe read query execution with automatic PII redaction and row limits. |
-| `db_dry_run` | Test mutation inside an auto-rollback transaction with row delta preview. |
-| `db_commit` | Execute verified mutation accompanied by authorization token. |
+| `db_query` | Safe read and mutation query execution with automatic PII redaction, cost gate, and DDL checks. |
+| `db_dry_run` | Test mutation inside an auto-rollback transaction with row delta preview and intent verification. |
+| `db_commit` | Execute verified mutation accompanied by cryptographic authorization token. |
 | `db_explain_query` | Analyze query execution plans, detect unindexed full-table scans, and receive index hints. |
 | `db_audit_log` | Retrieve compliance query audit trail, blocked operations, and risk scores. |
+| `db_validate_migration` | Validate DDL migration scripts for lock hazards and generate zero-downtime execution recipes. |
+| `db_check_schema_drift` | Audit live database foreign keys for missing indexes and detect structural schema drift. |
+| `db_check_semantic_intent` | Check stated English user intent against SQL AST target columns to stop unauthorized privilege/financial mutations. |
 
 ---
 
@@ -192,43 +206,38 @@ For production and shared environments, DBShield should be paired with database-
 
 ---
 
-## 🗺️ Project Roadmap
+## 🗺️ Project Roadmap & Enterprise Evolution
 
-- [x] **Phase 1: Architecture, Core Engine & Repository Scaffolding**
-  - Node.js 22 + TypeScript + Biome configuration
-  - Universal `DatabaseAdapter` interface & zero-config SQLite driver
-  - `@modelcontextprotocol/sdk` Stdio server setup
-  - Configuration manager & CLI entrypoint
-- [x] **Phase 2: SQL AST Parser & Mutation Guardrail Engine**
-  - AST-level query inspection with `node-sql-parser`
-  - Destructive DDL blocker (`DROP TABLE`, `TRUNCATE`, `ALTER TABLE DROP COLUMN`)
-  - Blind mutation protection (unconstrained `DELETE` / `UPDATE` without `WHERE`)
-  - Boolean & constant tautology bypass detection (`1=1`, `WHERE true`, `OR 1=1`)
-  - Multi-statement injection defense & safety tier scoring (`STRICT`, `BALANCED`, `PERMISSIVE`)
-  - First-class `db_query` MCP tool with automated guardrail interception
-- [x] **Phase 3: Dry-Run Sandbox & Auto-Rollback Transaction Engine**
-  - Atomic transaction rollback sandbox (`BEGIN ... ROLLBACK`) with zero database mutation side-effects
-  - Row-level blast radius estimation and `maxRowsPerMutation` threshold enforcement
-  - Cryptographically signed HMAC-SHA256 two-phase commit tokens (`CommitTokenManager`)
-  - Query hash tamper-proofing, short-lived TTLs, and replay attack prevention
-  - First-class `db_dry_run` and `db_commit` MCP tools
-- [x] **Phase 4: Real-Time Dynamic PII Masking & Data Redaction**
-  - Heuristic column detection for passwords, secrets, tokens, API keys, emails, phones, SSNs, credit cards
-  - High-performance regex inspection for inline PII embedded in generic text columns
-  - Format-preserving deterministic masking (`a***@ritualdev.in`, `+***-***-5309`, `****-****-****-4444`)
-  - Zero-leak secret replacement (`[REDACTED_SECRET]`, `[REDACTED_TOKEN]`)
-  - Automated compliance audit report headers injected into MCP `db_query` responses
-  - Custom column overrides via `config.customPiiColumns`
-- [x] **Phase 5: Full MCP Tool Suite & Cursor/Claude Auto-Configurator**
-  - `db_explain_query` query plan analysis with sequential scan & missing index alerts
-  - `db_audit_log` in-memory circular audit buffer with status & risk score filtering
-  - Interactive 1-click CLI configurators (`dbshield install-claude`, `dbshield install-cursor`)
-  - Cross-platform configuration file detection & graceful merging
-- [x] **Phase 6: Automated Testing, CI/CD, Documentation & Packaging**
-  - Comprehensive unit & integration testing suite (42 tests passing across all engines)
-  - GitHub Actions multi-platform CI matrix testing on Node.js 22 & 24 across Ubuntu and Windows
-  - Automated Release & npm publish workflow on tag push
-  - Zero-native-dependency bundle verification and production distribution via `pnpm pack`
+- [x] **Phase 1: Multi-Engine Core & Native PostgreSQL Adapter**
+  - Universal `DatabaseAdapter` interface & connection pooling via `pg.Pool`
+  - Cloud database auto-SSL detection (Neon, Supabase, Render, AWS RDS)
+  - Two-phase commit execution with simulation delta drift protection
+  - Automated PostgreSQL catalog reflection (`information_schema`, `pg_indexes`)
+- [x] **Phase 2: Runaway Query Killer & Pre-Execution Cost Gate**
+  - Automated `EXPLAIN` query plan pre-flight cost evaluation
+  - Planner cost threshold blocking (`maxEstimatedCost`) & row scan limits (`maxEstimatedRows`)
+  - Full-table unindexed sequential scan interception in STRICT tier
+  - Automatic statement timeouts (`statementTimeoutMs`) terminating runaway queries
+- [x] **Phase 3: Non-Destructive Migration & Schema Drift Gate**
+  - Dangerous DDL interception (`ALTER TABLE ADD COLUMN NOT NULL` without default)
+  - PostgreSQL non-concurrent index locking alert (`CREATE INDEX CONCURRENTLY` enforcer)
+  - Instant breaking table/column rename prevention
+  - Foreign key cascade lock auditor (`db_check_schema_drift`)
+  - Automated zero-downtime expand-and-contract migration generator (`db_validate_migration`)
+- [x] **Phase 4: Semantic Intent vs. SQL AST Mismatch Gate**
+  - AI agent prompt intent vs. AST modified column keyword tokenizer
+  - Sensitive column protection across privilege (`role`, `is_admin`), financial (`balance`), and credential fields
+  - Tiered safety enforcement with customizable sensitive columns
+  - Dedicated intent alignment validation tool (`db_check_semantic_intent`)
+- [x] **Phase 5: Zero-Config PostgreSQL Wire-Protocol Proxy Mode**
+  - High-performance TCP wire proxy listening on `:5433` (or `:5432`)
+  - Native PostgreSQL Wire Protocol v3 parser/encoder (Simple Query `'Q'`, Parse `'P'`, ErrorResponse `'E'`)
+  - Intercepts unsafe traffic at the socket layer returning standard SQLSTATE `42501` errors
+  - Drop-in universal compatibility with Prisma, Drizzle, SQLAlchemy, TypeORM, and `psql`
+- [x] **Testing, Packaging & Quality Assurance**
+  - 115 / 115 passing unit and integration tests across all security layers
+  - 100% Biome linting and type-checked TypeScript compilation
+  - Zero unredacted PII leakage guarantee across query logs, audit trails, and database errors
 
 ---
 

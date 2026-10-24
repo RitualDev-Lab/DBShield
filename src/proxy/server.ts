@@ -20,6 +20,7 @@ export interface PostgresWireProxyOptions {
   upstreamPort?: number;
   config?: DBShieldConfig;
   logger?: AuditLogger;
+  verbose?: boolean;
 }
 
 export interface ProxyStats {
@@ -43,6 +44,7 @@ export class PostgresWireProxy {
   public readonly listenHost: string;
   public readonly upstreamHost: string;
   public readonly upstreamPort: number;
+  public readonly verbose: boolean;
 
   private stats: ProxyStats = {
     activeConnections: 0,
@@ -58,6 +60,7 @@ export class PostgresWireProxy {
     this.listenHost = options.listenHost ?? "127.0.0.1";
     this.upstreamHost = options.upstreamHost ?? "127.0.0.1";
     this.upstreamPort = options.upstreamPort ?? 5432;
+    this.verbose = options.verbose ?? false;
 
     this.logger = options.logger || new AuditLogger(this.config.auditLogPath);
     this.sqlGuard = new SqlGuardEngine(this.config);
@@ -121,6 +124,12 @@ export class PostgresWireProxy {
     this.stats.totalConnections++;
     this.activeSockets.add(clientSocket);
 
+    if (this.verbose) {
+      console.log(
+        `🔌 [CONNECT] Client connected from ${clientSocket.remoteAddress || "127.0.0.1"}`,
+      );
+    }
+
     let clientBuffer = Buffer.alloc(0);
     let expectingStartup = true;
     let inErrorState = false;
@@ -133,6 +142,9 @@ export class PostgresWireProxy {
 
     clientSocket.on("close", () => {
       this.activeSockets.delete(clientSocket);
+      if (this.verbose) {
+        console.log("🔌 [DISCONNECT] Client disconnected");
+      }
     });
     upstreamSocket.on("close", () => {
       this.activeSockets.delete(upstreamSocket);
@@ -243,6 +255,12 @@ export class PostgresWireProxy {
 
             // Return native PostgreSQL ErrorResponse packet
             const primaryViolation = evaluation.violations[0];
+            if (this.verbose) {
+              console.error(
+                `🛑 [INTERCEPTED] ${evaluation.operation} on [${evaluation.targetTables.join(", ") || "table"}]: ${primaryViolation?.message || "Policy violation"}`,
+              );
+            }
+
             const errorPacket = encodeErrorResponse({
               severity: "ERROR",
               code: "42501", // insufficient_privilege
@@ -264,6 +282,13 @@ export class PostgresWireProxy {
 
           // Query is allowed
           this.stats.queriesAllowed++;
+          if (this.verbose) {
+            const preview = sql.trim().replace(/\s+/g, " ");
+            console.log(
+              `✅ [FORWARDED] ${evaluation.operation} on [${evaluation.targetTables.join(", ") || "table"}] (${preview.substring(0, 60)}${preview.length > 60 ? "..." : ""})`,
+            );
+          }
+
           this.logger.log({
             auditId: `audit-proxy-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
             timestamp: new Date().toISOString(),

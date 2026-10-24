@@ -116,6 +116,7 @@ Connect your ORMs or AI agents directly:
         upstreamHost,
         upstreamPort,
         config,
+        verbose: true,
       });
 
       await proxy.start();
