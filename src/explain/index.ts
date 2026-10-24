@@ -1,12 +1,5 @@
 import { stripSqlComments } from "../guard/ast.js";
-import type { DatabaseAdapter } from "../types/index.js";
-
-export interface ExplainReport {
-  rawPlan: Record<string, unknown>[];
-  bottlenecks: string[];
-  suggestions: string[];
-  isIndexed: boolean;
-}
+import type { DatabaseAdapter, ExplainReport } from "../types/index.js";
 
 export class QueryExplainer {
   private readonly adapter: DatabaseAdapter;
@@ -23,6 +16,9 @@ export class QueryExplainer {
     const bottlenecks: string[] = [];
     const suggestions: string[] = [];
     let isIndexed = true;
+    let estimatedCost: number | undefined;
+    let estimatedRows: number | undefined;
+    let hasSeqScan = false;
 
     try {
       const result = await this.adapter.query(explainSql, params);
@@ -35,8 +31,27 @@ export class QueryExplainer {
             row["QUERY PLAN"] || row["query plan"] || Object.values(row)[0] || "",
           );
 
+          // Extract total cost: cost=0.00..4523.00
+          const costMatch = planLine.match(/cost=\d+(?:\.\d+)?\.\.(\d+(?:\.\d+)?)/);
+          if (costMatch) {
+            const parsedCost = Number.parseFloat(costMatch[1]);
+            if (estimatedCost === undefined || parsedCost > estimatedCost) {
+              estimatedCost = parsedCost;
+            }
+          }
+
+          // Extract estimated rows: rows=152000
+          const rowsMatch = planLine.match(/rows=(\d+)/);
+          if (rowsMatch) {
+            const parsedRows = Number.parseInt(rowsMatch[1], 10);
+            if (estimatedRows === undefined || parsedRows > estimatedRows) {
+              estimatedRows = parsedRows;
+            }
+          }
+
           if (planLine.includes("Seq Scan on ")) {
             isIndexed = false;
+            hasSeqScan = true;
             const match = planLine.match(/Seq Scan on\s+([a-zA-Z0-9_]+)/i);
             const tableName = match ? match[1] : "table";
 
@@ -65,6 +80,7 @@ export class QueryExplainer {
           // Detect full table sequential scans
           if (detail.includes("SCAN ") && !detail.includes("USING INDEX")) {
             isIndexed = false;
+            hasSeqScan = true;
             const match = detail.match(/SCAN\s+(?:TABLE\s+)?([a-zA-Z0-9_]+)/i);
             const tableName = match ? match[1] : "table";
 
@@ -107,6 +123,9 @@ export class QueryExplainer {
         bottlenecks,
         suggestions,
         isIndexed,
+        estimatedCost,
+        estimatedRows,
+        hasSeqScan,
       };
     } catch (err) {
       return {
@@ -114,6 +133,7 @@ export class QueryExplainer {
         bottlenecks: [`Failed to generate EXPLAIN plan: ${(err as Error).message}`],
         suggestions: ["Ensure the SQL syntax is valid for EXPLAIN execution."],
         isIndexed: false,
+        hasSeqScan: false,
       };
     }
   }

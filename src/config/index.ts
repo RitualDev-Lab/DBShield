@@ -15,6 +15,13 @@ export const ConfigSchema = z.object({
   enablePiiMasking: z.boolean().default(true),
   customPiiColumns: z.array(z.string()).default([]),
   auditLogPath: z.string().optional(),
+  enableCostGate: z.boolean().default(true),
+  maxEstimatedCost: z.number().int().positive().default(50000),
+  warnEstimatedCost: z.number().int().positive().optional().default(10000),
+  maxEstimatedRows: z.number().int().positive().default(100000),
+  warnEstimatedRows: z.number().int().positive().optional().default(20000),
+  blockUnindexedSeqScan: z.boolean().default(false),
+  statementTimeoutMs: z.number().int().positive().default(5000),
 });
 
 export const DEFAULT_CONFIG: DBShieldConfig = {
@@ -27,6 +34,13 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   allowDestructiveDDL: false,
   enablePiiMasking: true,
   customPiiColumns: [],
+  enableCostGate: true,
+  maxEstimatedCost: 50000,
+  warnEstimatedCost: 10000,
+  maxEstimatedRows: 100000,
+  warnEstimatedRows: 20000,
+  blockUnindexedSeqScan: false,
+  statementTimeoutMs: 5000,
 };
 
 export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
@@ -66,6 +80,27 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   if (process.env.DBSHIELD_ENABLE_PII_MASKING) {
     envConfig.enablePiiMasking = process.env.DBSHIELD_ENABLE_PII_MASKING !== "false";
   }
+  if (process.env.DBSHIELD_ENABLE_COST_GATE) {
+    envConfig.enableCostGate = process.env.DBSHIELD_ENABLE_COST_GATE !== "false";
+  }
+  if (process.env.DBSHIELD_MAX_ESTIMATED_COST) {
+    envConfig.maxEstimatedCost = Number.parseInt(process.env.DBSHIELD_MAX_ESTIMATED_COST, 10);
+  }
+  if (process.env.DBSHIELD_WARN_ESTIMATED_COST) {
+    envConfig.warnEstimatedCost = Number.parseInt(process.env.DBSHIELD_WARN_ESTIMATED_COST, 10);
+  }
+  if (process.env.DBSHIELD_MAX_ESTIMATED_ROWS) {
+    envConfig.maxEstimatedRows = Number.parseInt(process.env.DBSHIELD_MAX_ESTIMATED_ROWS, 10);
+  }
+  if (process.env.DBSHIELD_WARN_ESTIMATED_ROWS) {
+    envConfig.warnEstimatedRows = Number.parseInt(process.env.DBSHIELD_WARN_ESTIMATED_ROWS, 10);
+  }
+  if (process.env.DBSHIELD_BLOCK_UNINDEXED_SEQ_SCAN) {
+    envConfig.blockUnindexedSeqScan = process.env.DBSHIELD_BLOCK_UNINDEXED_SEQ_SCAN === "true";
+  }
+  if (process.env.DBSHIELD_STATEMENT_TIMEOUT_MS) {
+    envConfig.statementTimeoutMs = Number.parseInt(process.env.DBSHIELD_STATEMENT_TIMEOUT_MS, 10);
+  }
 
   const merged = {
     ...DEFAULT_CONFIG,
@@ -88,6 +123,37 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
       merged.maxRowsPerRead = 100;
     } else if (merged.safetyTier === "PERMISSIVE") {
       merged.maxRowsPerRead = 2000;
+    }
+  }
+
+  // Adjust cost gate thresholds by safety tier if not custom set
+  if (!fileConfig.maxEstimatedCost && !envConfig.maxEstimatedCost) {
+    if (merged.safetyTier === "STRICT") {
+      merged.maxEstimatedCost = 10000;
+    } else if (merged.safetyTier === "PERMISSIVE") {
+      merged.maxEstimatedCost = 200000;
+    }
+  }
+
+  if (!fileConfig.maxEstimatedRows && !envConfig.maxEstimatedRows) {
+    if (merged.safetyTier === "STRICT") {
+      merged.maxEstimatedRows = 20000;
+    } else if (merged.safetyTier === "PERMISSIVE") {
+      merged.maxEstimatedRows = 500000;
+    }
+  }
+
+  if (!fileConfig.blockUnindexedSeqScan && !envConfig.blockUnindexedSeqScan) {
+    if (merged.safetyTier === "STRICT") {
+      merged.blockUnindexedSeqScan = true;
+    }
+  }
+
+  if (!fileConfig.statementTimeoutMs && !envConfig.statementTimeoutMs) {
+    if (merged.safetyTier === "STRICT") {
+      merged.statementTimeoutMs = 3000;
+    } else if (merged.safetyTier === "PERMISSIVE") {
+      merged.statementTimeoutMs = 15000;
     }
   }
 

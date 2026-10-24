@@ -12,12 +12,14 @@ export function createDatabaseAdapter(config: DBShieldConfig): DatabaseAdapter {
         config.storagePath || ":memory:",
         config.maxRowsPerRead,
         config.maxRowsPerMutation,
+        config.statementTimeoutMs,
       );
     case "postgres":
       return new PostgresAdapter(
         config.connectionString || process.env.DATABASE_URL || "postgres://localhost:5432/postgres",
         config.maxRowsPerRead,
         config.maxRowsPerMutation,
+        config.statementTimeoutMs,
       );
     case "mysql":
       // Fallback or upcoming driver adapter

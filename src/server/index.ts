@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createDatabaseAdapter } from "../adapters/index.js";
 import { AuditLogger } from "../audit/index.js";
 import { loadConfig } from "../config/index.js";
+import { CostGateEngine } from "../cost/index.js";
 import { QueryExplainer } from "../explain/index.js";
 import { SqlGuardEngine } from "../guard/index.js";
 import { type PiiRedactionReport, PiiRedactor } from "../pii/index.js";
@@ -20,6 +21,7 @@ export interface McpServerInstance {
   piiRedactor: PiiRedactor;
   auditLogger: AuditLogger;
   explainer: QueryExplainer;
+  costGateEngine: CostGateEngine;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -38,6 +40,7 @@ export async function createMcpServer(
   const piiRedactor = new PiiRedactor(config.customPiiColumns);
   const auditLogger = new AuditLogger(config.auditLogPath, 500, piiRedactor);
   const explainer = new QueryExplainer(adapter);
+  const costGateEngine = new CostGateEngine(config, explainer);
 
   const server = new McpServer({
     name: "dbshield",
@@ -62,6 +65,10 @@ export async function createMcpServer(
                 dialect: config.dialect,
                 safetyTier: config.safetyTier,
                 piiMaskingEnabled: config.enablePiiMasking,
+                costGateEnabled: config.enableCostGate,
+                maxEstimatedCost: config.maxEstimatedCost,
+                maxEstimatedRows: config.maxEstimatedRows,
+                statementTimeoutMs: config.statementTimeoutMs,
                 maxRowsPerMutation: config.maxRowsPerMutation,
                 maxRowsPerRead: config.maxRowsPerRead,
                 allowDestructiveDDL: config.allowDestructiveDDL,
@@ -210,10 +217,53 @@ export async function createMcpServer(
         };
       }
 
+      // Phase 2: Pre-Execution Cost & Runaway Query Interception
+      const costEvaluation = await costGateEngine.evaluate(sql, params);
+      if (!costEvaluation.allowed) {
+        await auditLogger.log({
+          auditId: randomUUID(),
+          timestamp: new Date().toISOString(),
+          sql,
+          operation: evaluation.operation,
+          status: "BLOCKED",
+          riskLevel: costEvaluation.riskLevel,
+          riskScore: 75,
+          violations: [costEvaluation.code || "EXCESSIVE_QUERY_COST"],
+        });
+
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  status: "BLOCKED",
+                  blockedBy: "DBShield Cost & Performance Gate",
+                  code: costEvaluation.code,
+                  riskLevel: costEvaluation.riskLevel,
+                  operation: evaluation.operation,
+                  targetTables: evaluation.targetTables,
+                  estimatedCost: costEvaluation.estimatedCost,
+                  maxAllowedCost: costEvaluation.maxAllowedCost,
+                  estimatedRows: costEvaluation.estimatedRows,
+                  maxAllowedRows: costEvaluation.maxAllowedRows,
+                  bottlenecks: costEvaluation.bottlenecks,
+                  suggestions: costEvaluation.suggestions,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
       try {
         const result = await adapter.query(sql, params, {
           maxRows: config.maxRowsPerRead,
           maxMutationRows: config.maxRowsPerMutation,
+          timeoutMs: config.statementTimeoutMs,
         });
         let finalRows = result.rows;
         let piiReport: PiiRedactionReport | undefined;
@@ -236,6 +286,8 @@ export async function createMcpServer(
           piiRedacted: (piiReport?.totalFieldsRedacted || 0) > 0,
         });
 
+        const combinedWarnings = [...evaluation.warnings, ...costEvaluation.warnings];
+
         return {
           content: [
             {
@@ -251,6 +303,7 @@ export async function createMcpServer(
                   executionTimeMs: result.executionTimeMs,
                   columns: result.columns,
                   rows: finalRows,
+                  warnings: combinedWarnings.length > 0 ? combinedWarnings : undefined,
                   pagination: result.meta ?? {
                     totalReturned: result.rowCount,
                     isTruncated: false,
@@ -264,6 +317,13 @@ export async function createMcpServer(
                         totalFieldsRedacted: piiReport?.totalFieldsRedacted || 0,
                       }
                     : { enabled: false },
+                  costMetrics: config.enableCostGate
+                    ? {
+                        estimatedCost: costEvaluation.estimatedCost,
+                        estimatedRows: costEvaluation.estimatedRows,
+                        isIndexed: costEvaluation.explainReport?.isIndexed ?? true,
+                      }
+                    : undefined,
                   auditId: result.auditId,
                 },
                 null,
@@ -275,16 +335,17 @@ export async function createMcpServer(
       } catch (err) {
         const rawMessage = (err as Error).message;
         const sanitizedMessage = piiRedactor.redactErrorMessage(rawMessage);
+        const isTimeout = rawMessage.includes("[QUERY_TIMEOUT_EXCEEDED]");
 
         await auditLogger.log({
           auditId: randomUUID(),
           timestamp: new Date().toISOString(),
           sql,
           operation: evaluation.operation,
-          status: "ERROR",
-          riskLevel: evaluation.riskLevel,
-          riskScore: evaluation.riskScore,
-          violations: [sanitizedMessage],
+          status: isTimeout ? "TIMEOUT" : "ERROR",
+          riskLevel: isTimeout ? "BLOCKED" : evaluation.riskLevel,
+          riskScore: isTimeout ? 80 : evaluation.riskScore,
+          violations: [isTimeout ? "QUERY_TIMEOUT_EXCEEDED" : sanitizedMessage],
         });
 
         return {
@@ -294,8 +355,11 @@ export async function createMcpServer(
               type: "text",
               text: JSON.stringify(
                 {
-                  status: "DATABASE_ERROR",
+                  status: isTimeout ? "TIMEOUT" : "DATABASE_ERROR",
                   error: sanitizedMessage,
+                  suggestion: isTimeout
+                    ? `Query execution exceeded statement timeout limit (${config.statementTimeoutMs}ms). Consider optimizing filters, indexes, or adding LIMIT.`
+                    : undefined,
                 },
                 null,
                 2,
@@ -490,6 +554,15 @@ export async function createMcpServer(
                 status: "EXPLAINED",
                 isOptimized: report.isIndexed && report.bottlenecks.length === 0,
                 isIndexed: report.isIndexed,
+                estimatedCost: report.estimatedCost,
+                estimatedRows: report.estimatedRows,
+                hasSeqScan: report.hasSeqScan,
+                costThresholdExceeded:
+                  report.estimatedCost !== undefined &&
+                  report.estimatedCost > config.maxEstimatedCost,
+                rowThresholdExceeded:
+                  report.estimatedRows !== undefined &&
+                  report.estimatedRows > config.maxEstimatedRows,
                 bottlenecks: report.bottlenecks,
                 indexingSuggestions: report.suggestions,
                 executionPlan: report.rawPlan,
@@ -560,6 +633,7 @@ export async function createMcpServer(
     piiRedactor,
     auditLogger,
     explainer,
+    costGateEngine,
     async start() {
       const transport = new StdioServerTransport();
       await server.connect(transport);

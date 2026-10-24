@@ -8,7 +8,14 @@ export interface AuditLogEntry {
   timestamp: string;
   sql: string;
   operation: SqlOperationType;
-  status: "SUCCESS" | "BLOCKED" | "DRY_RUN_APPROVED" | "DRY_RUN_REJECTED" | "COMMITTED" | "ERROR";
+  status:
+    | "SUCCESS"
+    | "BLOCKED"
+    | "DRY_RUN_APPROVED"
+    | "DRY_RUN_REJECTED"
+    | "COMMITTED"
+    | "ERROR"
+    | "TIMEOUT";
   riskLevel: RiskLevel;
   riskScore: number;
   rowCount?: number;

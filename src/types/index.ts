@@ -89,6 +89,31 @@ export interface TableSchema {
   indexes: IndexDefinition[];
 }
 
+export interface ExplainReport {
+  rawPlan: Record<string, unknown>[];
+  bottlenecks: string[];
+  suggestions: string[];
+  isIndexed: boolean;
+  estimatedCost?: number;
+  estimatedRows?: number;
+  hasSeqScan?: boolean;
+}
+
+export interface CostGateResult {
+  allowed: boolean;
+  blocked: boolean;
+  code?: "EXCESSIVE_QUERY_COST" | "UNINDEXED_SCAN_DISALLOWED" | "UNBOUNDED_SCAN_DISALLOWED";
+  riskLevel: RiskLevel;
+  estimatedCost?: number;
+  maxAllowedCost?: number;
+  estimatedRows?: number;
+  maxAllowedRows?: number;
+  bottlenecks: string[];
+  suggestions: string[];
+  warnings: string[];
+  explainReport?: ExplainReport;
+}
+
 export interface DBShieldConfig {
   dialect: DatabaseDialect;
   connectionString?: string;
@@ -101,6 +126,13 @@ export interface DBShieldConfig {
   enablePiiMasking: boolean; // Default true
   customPiiColumns?: string[];
   auditLogPath?: string;
+  enableCostGate: boolean; // Phase 2: Runaway query and cost gate (default true)
+  maxEstimatedCost: number; // Maximum query planner cost allowed (default 50000 in BALANCED, 10000 in STRICT)
+  warnEstimatedCost?: number; // Soft warning cost threshold (default 10000)
+  maxEstimatedRows: number; // Maximum planner estimated rows scanned (default 100000 in BALANCED, 20000 in STRICT)
+  warnEstimatedRows?: number; // Soft warning row scan threshold (default 20000)
+  blockUnindexedSeqScan: boolean; // Disallows full table sequential scan (default true in STRICT, false in BALANCED)
+  statementTimeoutMs: number; // Statement execution timeout in milliseconds (default 5000ms)
 }
 
 export interface DatabaseAdapter {
@@ -110,13 +142,13 @@ export interface DatabaseAdapter {
   query(
     sql: string,
     params?: unknown[],
-    options?: { maxRows?: number; maxMutationRows?: number },
+    options?: { maxRows?: number; maxMutationRows?: number; timeoutMs?: number },
   ): Promise<QueryResult>;
   executeDryRun(sql: string, params?: unknown[]): Promise<DryRunResult>;
   executeCommit(
     sql: string,
     params?: unknown[],
-    options?: { maxRows?: number; expectedRows?: number },
+    options?: { maxRows?: number; expectedRows?: number; timeoutMs?: number },
   ): Promise<QueryResult>;
   getSchema(): Promise<TableSchema[]>;
   getTableSchema(tableName: string): Promise<TableSchema | null>;

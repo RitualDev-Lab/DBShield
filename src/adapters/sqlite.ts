@@ -20,11 +20,18 @@ export class SqliteAdapter implements DatabaseAdapter {
   private readonly storagePath: string;
   private readonly defaultMaxRows: number;
   private readonly defaultMaxMutationRows: number;
+  private readonly statementTimeoutMs: number;
 
-  constructor(storagePath = ":memory:", defaultMaxRows = 500, defaultMaxMutationRows = 50) {
+  constructor(
+    storagePath = ":memory:",
+    defaultMaxRows = 500,
+    defaultMaxMutationRows = 50,
+    statementTimeoutMs = 5000,
+  ) {
     this.storagePath = storagePath;
     this.defaultMaxRows = defaultMaxRows;
     this.defaultMaxMutationRows = defaultMaxMutationRows;
+    this.statementTimeoutMs = statementTimeoutMs;
   }
 
   async connect(): Promise<void> {
@@ -50,11 +57,12 @@ export class SqliteAdapter implements DatabaseAdapter {
   async query(
     sql: string,
     params: unknown[] = [],
-    options?: { maxRows?: number; maxMutationRows?: number },
+    options?: { maxRows?: number; maxMutationRows?: number; timeoutMs?: number },
   ): Promise<QueryResult> {
     const db = this.ensureConnected();
     const startTime = performance.now();
     const auditId = randomUUID();
+    const timeoutMs = options?.timeoutMs ?? this.statementTimeoutMs ?? 5000;
 
     const stripped = stripSqlComments(sql);
     if (!stripped) {
@@ -90,6 +98,11 @@ export class SqliteAdapter implements DatabaseAdapter {
         Record<string, unknown>
       >;
       for (const row of iterator) {
+        if (performance.now() - startTime > timeoutMs) {
+          throw new Error(
+            `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+          );
+        }
         if (rows.length < maxRows) {
           rows.push(row);
         } else {
@@ -125,10 +138,23 @@ export class SqliteAdapter implements DatabaseAdapter {
     // Mutation or DDL: enforce transactional execution and row ceiling
     const maxMutationRows = options?.maxMutationRows ?? this.defaultMaxMutationRows ?? 50;
 
+    if (performance.now() - startTime > timeoutMs) {
+      throw new Error(
+        `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+      );
+    }
+
     db.exec("BEGIN TRANSACTION;");
     try {
       const result = stmt.run(...(params as SqliteParam[]));
       const changes = Number(result.changes || 0);
+
+      if (performance.now() - startTime > timeoutMs) {
+        db.exec("ROLLBACK;");
+        throw new Error(
+          `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+        );
+      }
 
       if (changes > maxMutationRows) {
         db.exec("ROLLBACK;");

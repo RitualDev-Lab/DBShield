@@ -27,6 +27,7 @@ export interface PostgresAdapterOptions {
   connectionTimeoutMillis?: number;
   defaultMaxRows?: number;
   defaultMaxMutationRows?: number;
+  statementTimeoutMs?: number;
 }
 
 export class PostgresAdapter implements DatabaseAdapter {
@@ -35,14 +36,17 @@ export class PostgresAdapter implements DatabaseAdapter {
   private readonly config: pg.PoolConfig;
   private readonly defaultMaxRows: number;
   private readonly defaultMaxMutationRows: number;
+  private readonly statementTimeoutMs: number;
 
   constructor(
     connection: string | PostgresAdapterOptions = "postgres://localhost:5432/postgres",
     defaultMaxRows = 500,
     defaultMaxMutationRows = 50,
+    statementTimeoutMs = 5000,
   ) {
     this.defaultMaxRows = defaultMaxRows;
     this.defaultMaxMutationRows = defaultMaxMutationRows;
+    this.statementTimeoutMs = statementTimeoutMs;
 
     if (typeof connection === "string") {
       const isCloud =
@@ -63,11 +67,13 @@ export class PostgresAdapter implements DatabaseAdapter {
       const {
         defaultMaxRows: optMaxRows,
         defaultMaxMutationRows: optMaxMutation,
+        statementTimeoutMs: optTimeout,
         ...poolConfig
       } = connection;
 
       if (optMaxRows !== undefined) this.defaultMaxRows = optMaxRows;
       if (optMaxMutation !== undefined) this.defaultMaxMutationRows = optMaxMutation;
+      if (optTimeout !== undefined) this.statementTimeoutMs = optTimeout;
 
       this.config = {
         max: 10,
@@ -113,11 +119,12 @@ export class PostgresAdapter implements DatabaseAdapter {
   async query(
     sql: string,
     params: unknown[] = [],
-    options?: { maxRows?: number; maxMutationRows?: number },
+    options?: { maxRows?: number; maxMutationRows?: number; timeoutMs?: number },
   ): Promise<QueryResult> {
     const pool = this.getPool();
     const startTime = performance.now();
     const auditId = randomUUID();
+    const timeoutMs = options?.timeoutMs ?? this.statementTimeoutMs ?? 5000;
 
     const stripped = stripSqlComments(sql);
     if (!stripped) {
@@ -141,7 +148,36 @@ export class PostgresAdapter implements DatabaseAdapter {
 
     if (isRowReturningCandidate) {
       const maxRows = options?.maxRows ?? this.defaultMaxRows ?? 500;
-      const result = await pool.query(sql, params);
+      let timer: NodeJS.Timeout | undefined;
+      let result: pg.QueryResult;
+
+      try {
+        const queryPromise = pool.query(sql, params);
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(
+              new Error(
+                `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+              ),
+            );
+          }, timeoutMs);
+        });
+
+        result = await Promise.race([queryPromise, timeoutPromise]);
+      } catch (err) {
+        if (
+          (err as { code?: string }).code === "57014" ||
+          (err as Error).message?.includes("canceling statement due to statement timeout") ||
+          (err as Error).message?.includes("[QUERY_TIMEOUT_EXCEEDED]")
+        ) {
+          throw new Error(
+            `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+          );
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
 
       const columns = result.fields ? result.fields.map((f) => f.name) : [];
       let rows = result.rows as Record<string, unknown>[];
@@ -178,10 +214,22 @@ export class PostgresAdapter implements DatabaseAdapter {
     // Mutation or DDL: Enforce transactional execution and row ceiling
     const maxMutationRows = options?.maxMutationRows ?? this.defaultMaxMutationRows ?? 50;
     const client = await pool.connect();
+    let mutationTimer: NodeJS.Timeout | undefined;
 
     await client.query("BEGIN;");
     try {
-      const result = await client.query(sql, params);
+      const queryPromise = client.query(sql, params);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        mutationTimer = setTimeout(() => {
+          reject(
+            new Error(
+              `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+            ),
+          );
+        }, timeoutMs);
+      });
+
+      const result = await Promise.race([queryPromise, timeoutPromise]);
       const changes = Number(result.rowCount || 0);
 
       if (changes > maxMutationRows) {
@@ -208,8 +256,18 @@ export class PostgresAdapter implements DatabaseAdapter {
       } catch {
         // Rollback on failure
       }
+      if (
+        (err as { code?: string }).code === "57014" ||
+        (err as Error).message?.includes("canceling statement due to statement timeout") ||
+        (err as Error).message?.includes("[QUERY_TIMEOUT_EXCEEDED]")
+      ) {
+        throw new Error(
+          `[QUERY_TIMEOUT_EXCEEDED] Query execution exceeded the hard limit of ${timeoutMs}ms and was terminated to protect database stability.`,
+        );
+      }
       throw err;
     } finally {
+      if (mutationTimer) clearTimeout(mutationTimer);
       client.release();
     }
   }
