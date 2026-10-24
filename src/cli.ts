@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config/index.js";
 import { installClaude, installCursor } from "./configurator/index.js";
+import { PostgresWireProxy } from "./proxy/index.js";
 import { createMcpServer } from "./server/index.js";
 
 const VERSION = "0.1.0";
@@ -17,6 +18,7 @@ const HELP_TEXT = `
 
   COMMANDS:
     start            Launch the MCP server on stdio transport (default)
+    proxy            Launch PostgreSQL wire-protocol proxy on TCP port (default: 5433)
     status           Inspect database connection and active security parameters
     init             Generate a default dbshield.config.json in the current directory
     install-claude   Automatically configure Claude Desktop to use DBShield
@@ -27,6 +29,9 @@ const HELP_TEXT = `
     --dialect <sqlite|postgres|mysql>   Specify database dialect (default: sqlite)
     --storage <path>                    SQLite database file path (default: ./dbshield.sqlite)
     --tier <STRICT|BALANCED|PERMISSIVE> Security enforcement level (default: BALANCED)
+    --port <number>                     Proxy listen port (default: 5433)
+    --upstream-host <host>              Upstream PostgreSQL host (default: 127.0.0.1)
+    --upstream-port <port>              Upstream PostgreSQL port (default: 5432)
     --version, -v                       Display DBShield version
     --help, -h                          Display this help message
 
@@ -70,6 +75,57 @@ async function main() {
     case "start": {
       const serverInstance = await createMcpServer();
       await serverInstance.start();
+      break;
+    }
+
+    case "proxy": {
+      const config = await loadConfig();
+      const portIdx = args.indexOf("--port");
+      const listenPort =
+        portIdx !== -1 && args[portIdx + 1]
+          ? Number.parseInt(args[portIdx + 1], 10)
+          : config.proxyPort || 5433;
+      const hostIdx = args.indexOf("--upstream-host");
+      const upstreamHost =
+        hostIdx !== -1 && args[hostIdx + 1]
+          ? args[hostIdx + 1]
+          : config.upstreamHost || "127.0.0.1";
+      const uPortIdx = args.indexOf("--upstream-port");
+      const upstreamPort =
+        uPortIdx !== -1 && args[uPortIdx + 1]
+          ? Number.parseInt(args[uPortIdx + 1], 10)
+          : config.upstreamPort || 5432;
+
+      console.log(`
+🛡️  DBShield PostgreSQL Wire-Protocol Proxy
+──────────────────────────────────────────
+Listen Address:    127.0.0.1:${listenPort}
+Upstream Target:   ${upstreamHost}:${upstreamPort}
+Safety Tier:       ${config.safetyTier}
+AST Safety Gate:   ENABLED
+Cost Gate:         ${config.enableCostGate ? "ENABLED" : "DISABLED"}
+Migration Gate:    ${config.enableMigrationGate ? "ENABLED" : "DISABLED"}
+Semantic Guard:    ${config.enableSemanticGuard ? "ENABLED" : "DISABLED"}
+
+Connect your ORMs or AI agents directly:
+  DATABASE_URL="postgres://user:pass@127.0.0.1:${listenPort}/dbname"
+`);
+
+      const proxy = new PostgresWireProxy({
+        listenPort,
+        upstreamHost,
+        upstreamPort,
+        config,
+      });
+
+      await proxy.start();
+      console.log(`🚀 DBShield proxy listening on port ${listenPort}. Press Ctrl+C to terminate.`);
+
+      process.on("SIGINT", async () => {
+        console.log("\n🛑 Gracefully shutting down DBShield proxy...");
+        await proxy.stop();
+        process.exit(0);
+      });
       break;
     }
 

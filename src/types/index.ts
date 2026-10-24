@@ -188,6 +188,10 @@ export interface DBShieldConfig {
   enableSemanticGuard: boolean; // Phase 4: Stated intent vs SQL AST mismatch gate (default true)
   customSensitiveColumns?: string[]; // Custom sensitive column names to protect (e.g. ['kyc_status', 'discount'])
   requireIntentForSensitiveColumns: boolean; // Require explicit intent when mutating sensitive fields (default true in STRICT, false in BALANCED)
+  proxyPort?: number; // Port for PostgreSQL TCP wire proxy (default 5433)
+  proxyHost?: string; // Host for PostgreSQL TCP wire proxy (default "127.0.0.1")
+  upstreamHost?: string; // Upstream target PostgreSQL host (default "127.0.0.1")
+  upstreamPort?: number; // Upstream target PostgreSQL port (default 5432)
 }
 
 export interface DatabaseAdapter {

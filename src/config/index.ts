@@ -28,6 +28,10 @@ export const ConfigSchema = z.object({
   enableSemanticGuard: z.boolean().default(true),
   customSensitiveColumns: z.array(z.string()).default([]),
   requireIntentForSensitiveColumns: z.boolean().default(false),
+  proxyPort: z.number().int().positive().default(5433),
+  proxyHost: z.string().default("127.0.0.1"),
+  upstreamHost: z.string().default("127.0.0.1"),
+  upstreamPort: z.number().int().positive().default(5432),
 });
 
 export const DEFAULT_CONFIG: DBShieldConfig = {
@@ -53,6 +57,10 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   enableSemanticGuard: true,
   customSensitiveColumns: [],
   requireIntentForSensitiveColumns: false,
+  proxyPort: 5433,
+  proxyHost: "127.0.0.1",
+  upstreamHost: "127.0.0.1",
+  upstreamPort: 5432,
 };
 
 export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
@@ -129,6 +137,18 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   if (process.env.DBSHIELD_REQUIRE_INTENT_FOR_SENSITIVE) {
     envConfig.requireIntentForSensitiveColumns =
       process.env.DBSHIELD_REQUIRE_INTENT_FOR_SENSITIVE === "true";
+  }
+  if (process.env.DBSHIELD_PROXY_PORT) {
+    envConfig.proxyPort = Number.parseInt(process.env.DBSHIELD_PROXY_PORT, 10);
+  }
+  if (process.env.DBSHIELD_PROXY_HOST) {
+    envConfig.proxyHost = process.env.DBSHIELD_PROXY_HOST;
+  }
+  if (process.env.DBSHIELD_UPSTREAM_HOST) {
+    envConfig.upstreamHost = process.env.DBSHIELD_UPSTREAM_HOST;
+  }
+  if (process.env.DBSHIELD_UPSTREAM_PORT) {
+    envConfig.upstreamPort = Number.parseInt(process.env.DBSHIELD_UPSTREAM_PORT, 10);
   }
 
   const merged = {
