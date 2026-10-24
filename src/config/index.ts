@@ -22,6 +22,9 @@ export const ConfigSchema = z.object({
   warnEstimatedRows: z.number().int().positive().optional().default(20000),
   blockUnindexedSeqScan: z.boolean().default(false),
   statementTimeoutMs: z.number().int().positive().default(5000),
+  enableMigrationGate: z.boolean().default(true),
+  enforceConcurrentIndexCreation: z.boolean().default(false),
+  disallowBreakingRenames: z.boolean().default(true),
 });
 
 export const DEFAULT_CONFIG: DBShieldConfig = {
@@ -41,6 +44,9 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   warnEstimatedRows: 20000,
   blockUnindexedSeqScan: false,
   statementTimeoutMs: 5000,
+  enableMigrationGate: true,
+  enforceConcurrentIndexCreation: false,
+  disallowBreakingRenames: true,
 };
 
 export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
@@ -101,6 +107,16 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
   if (process.env.DBSHIELD_STATEMENT_TIMEOUT_MS) {
     envConfig.statementTimeoutMs = Number.parseInt(process.env.DBSHIELD_STATEMENT_TIMEOUT_MS, 10);
   }
+  if (process.env.DBSHIELD_ENABLE_MIGRATION_GATE) {
+    envConfig.enableMigrationGate = process.env.DBSHIELD_ENABLE_MIGRATION_GATE !== "false";
+  }
+  if (process.env.DBSHIELD_ENFORCE_CONCURRENT_INDEX) {
+    envConfig.enforceConcurrentIndexCreation =
+      process.env.DBSHIELD_ENFORCE_CONCURRENT_INDEX === "true";
+  }
+  if (process.env.DBSHIELD_DISALLOW_BREAKING_RENAMES) {
+    envConfig.disallowBreakingRenames = process.env.DBSHIELD_DISALLOW_BREAKING_RENAMES !== "false";
+  }
 
   const merged = {
     ...DEFAULT_CONFIG,
@@ -154,6 +170,18 @@ export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {
       merged.statementTimeoutMs = 3000;
     } else if (merged.safetyTier === "PERMISSIVE") {
       merged.statementTimeoutMs = 15000;
+    }
+  }
+
+  if (!fileConfig.enforceConcurrentIndexCreation && !envConfig.enforceConcurrentIndexCreation) {
+    if (merged.safetyTier === "STRICT") {
+      merged.enforceConcurrentIndexCreation = true;
+    }
+  }
+
+  if (!fileConfig.disallowBreakingRenames && !envConfig.disallowBreakingRenames) {
+    if (merged.safetyTier === "PERMISSIVE") {
+      merged.disallowBreakingRenames = false;
     }
   }
 

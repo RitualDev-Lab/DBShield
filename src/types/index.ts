@@ -114,6 +114,42 @@ export interface CostGateResult {
   explainReport?: ExplainReport;
 }
 
+export interface MigrationViolation {
+  code: string;
+  statement: string;
+  targetTable: string;
+  targetColumn?: string;
+  severity: RiskLevel;
+  lockType: "ACCESS_EXCLUSIVE" | "SHARE" | "SHARE_UPDATE_EXCLUSIVE" | "NONE";
+  message: string;
+  safeAlternative: string;
+}
+
+export interface MigrationValidationReport {
+  safe: boolean;
+  riskScore: number;
+  highestLockLevel: "ACCESS_EXCLUSIVE" | "SHARE" | "SHARE_UPDATE_EXCLUSIVE" | "NONE";
+  violations: MigrationViolation[];
+  warnings: string[];
+  safeMigrationPlan: string[];
+}
+
+export interface SchemaDriftDifference {
+  type: "MISSING_TABLE" | "UNEXPECTED_TABLE" | "MISSING_COLUMN" | "TYPE_MISMATCH" | "MISSING_INDEX";
+  table: string;
+  column?: string;
+  expected?: string;
+  actual?: string;
+  recommendation: string;
+}
+
+export interface SchemaDriftReport {
+  inSync: boolean;
+  totalTables: number;
+  differences: SchemaDriftDifference[];
+  unindexedForeignKeys: Array<{ table: string; column: string; referencedTable: string }>;
+}
+
 export interface DBShieldConfig {
   dialect: DatabaseDialect;
   connectionString?: string;
@@ -133,6 +169,9 @@ export interface DBShieldConfig {
   warnEstimatedRows?: number; // Soft warning row scan threshold (default 20000)
   blockUnindexedSeqScan: boolean; // Disallows full table sequential scan (default true in STRICT, false in BALANCED)
   statementTimeoutMs: number; // Statement execution timeout in milliseconds (default 5000ms)
+  enableMigrationGate: boolean; // Phase 3: Migration safety and schema drift gate (default true)
+  enforceConcurrentIndexCreation: boolean; // Require CREATE INDEX CONCURRENTLY in Postgres (default true in STRICT, false in BALANCED)
+  disallowBreakingRenames: boolean; // Block table/column renames without zero-downtime expand-contract (default true in STRICT and BALANCED)
 }
 
 export interface DatabaseAdapter {

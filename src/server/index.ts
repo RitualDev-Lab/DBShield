@@ -8,6 +8,7 @@ import { loadConfig } from "../config/index.js";
 import { CostGateEngine } from "../cost/index.js";
 import { QueryExplainer } from "../explain/index.js";
 import { SqlGuardEngine } from "../guard/index.js";
+import { MigrationSafetyEngine } from "../migration/index.js";
 import { type PiiRedactionReport, PiiRedactor } from "../pii/index.js";
 import { SandboxEngine } from "../sandbox/index.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
@@ -22,6 +23,7 @@ export interface McpServerInstance {
   auditLogger: AuditLogger;
   explainer: QueryExplainer;
   costGateEngine: CostGateEngine;
+  migrationEngine: MigrationSafetyEngine;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -41,6 +43,7 @@ export async function createMcpServer(
   const auditLogger = new AuditLogger(config.auditLogPath, 500, piiRedactor);
   const explainer = new QueryExplainer(adapter);
   const costGateEngine = new CostGateEngine(config, explainer);
+  const migrationEngine = new MigrationSafetyEngine(config);
 
   const server = new McpServer({
     name: "dbshield",
@@ -69,6 +72,8 @@ export async function createMcpServer(
                 maxEstimatedCost: config.maxEstimatedCost,
                 maxEstimatedRows: config.maxEstimatedRows,
                 statementTimeoutMs: config.statementTimeoutMs,
+                migrationGateEnabled: config.enableMigrationGate,
+                enforceConcurrentIndexCreation: config.enforceConcurrentIndexCreation,
                 maxRowsPerMutation: config.maxRowsPerMutation,
                 maxRowsPerRead: config.maxRowsPerRead,
                 allowDestructiveDDL: config.allowDestructiveDDL,
@@ -215,6 +220,55 @@ export async function createMcpServer(
             },
           ],
         };
+      }
+
+      // Phase 3: Non-Destructive Migration & DDL Lock Safety Gate
+      if (
+        config.enableMigrationGate &&
+        (evaluation.operation.startsWith("DDL") ||
+          sql.toUpperCase().includes("ALTER TABLE") ||
+          sql.toUpperCase().includes("CREATE INDEX") ||
+          sql.toUpperCase().includes("DROP TABLE"))
+      ) {
+        const migrationValidation = migrationEngine.validateMigration(sql, config.dialect);
+        if (!migrationValidation.safe && !config.allowDestructiveDDL) {
+          await auditLogger.log({
+            auditId: randomUUID(),
+            timestamp: new Date().toISOString(),
+            sql,
+            operation: evaluation.operation,
+            status: "BLOCKED",
+            riskLevel: "BLOCKED",
+            riskScore: migrationValidation.riskScore,
+            violations: migrationValidation.violations.map((v) => v.code),
+          });
+
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "BLOCKED",
+                    blockedBy: "DBShield Migration Safety Gate",
+                    code: "MIGRATION_SAFETY_VIOLATION",
+                    riskScore: migrationValidation.riskScore,
+                    highestLockLevel: migrationValidation.highestLockLevel,
+                    violations: migrationValidation.violations,
+                    warnings: migrationValidation.warnings,
+                    safeMigrationPlan: migrationValidation.safeMigrationPlan,
+                    suggestion:
+                      migrationValidation.safeMigrationPlan[0] ||
+                      "Destructive or lock-inducing DDL is blocked by DBShield to protect production availability.",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
       }
 
       // Phase 2: Pre-Execution Cost & Runaway Query Interception
@@ -624,6 +678,71 @@ export async function createMcpServer(
     },
   );
 
+  // Phase 3: Migration Safety & DDL Lock Validator Tool
+  server.tool(
+    "db_validate_migration",
+    "Analyze DDL migrations against zero-downtime safety rules, detect table-level locking risks (e.g. non-concurrent index creation), dangerous NOT NULL columns, and destructive column/table drops.",
+    {
+      sql: z
+        .string()
+        .describe("The DDL SQL statement or multi-statement migration script to validate."),
+    },
+    async ({ sql }) => {
+      const report = migrationEngine.validateMigration(sql, config.dialect);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "VALIDATED",
+                safe: report.safe,
+                riskScore: report.riskScore,
+                highestLockLevel: report.highestLockLevel,
+                violationsCount: report.violations.length,
+                violations: report.violations,
+                warnings: report.warnings,
+                safeMigrationPlan: report.safeMigrationPlan,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  // Phase 3: Schema Health & Unindexed Foreign Keys Drift Tool
+  server.tool(
+    "db_check_schema_drift",
+    "Inspect database schema health, identify unindexed foreign keys causing cascade locks, and detect schema drift.",
+    {},
+    async () => {
+      const liveSchemas = await adapter.getSchema();
+      const report = migrationEngine.analyzeSchemaHealth(liveSchemas);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                status: "HEALTH_CHECK",
+                inSync: report.inSync,
+                totalTables: report.totalTables,
+                unindexedForeignKeysCount: report.unindexedForeignKeys.length,
+                unindexedForeignKeys: report.unindexedForeignKeys,
+                differences: report.differences,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
   return {
     server,
     adapter,
@@ -634,6 +753,7 @@ export async function createMcpServer(
     auditLogger,
     explainer,
     costGateEngine,
+    migrationEngine,
     async start() {
       const transport = new StdioServerTransport();
       await server.connect(transport);
