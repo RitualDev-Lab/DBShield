@@ -97,6 +97,8 @@ export interface ExplainReport {
   estimatedCost?: number;
   estimatedRows?: number;
   hasSeqScan?: boolean;
+  missingIndexes?: MissingIndexAdvice[];
+  advisorReport?: QueryPlanAdvisorReport;
 }
 
 export interface CostGateResult {
@@ -171,6 +173,99 @@ export interface CustomPiiRule {
   formatPreserving?: boolean; // When true, deterministic pseudonym preserves referential integrity
 }
 
+export interface MissingIndexAdvice {
+  tableName: string;
+  columns: string[];
+  suggestedIndexName: string;
+  suggestedDdl: string;
+  regressiveSeverity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  reason: string;
+  estimatedCost?: number;
+  estimatedRows?: number;
+}
+
+export interface QueryPlanAdvisorReport {
+  hasRegression: boolean;
+  advice: MissingIndexAdvice[];
+  alerts: string[];
+  suggestedDdls: string[];
+}
+
+export interface VirtualSchemaRoleConfig {
+  allowedTables?: string[];
+  deniedTables?: string[];
+  deniedColumns?: Record<string, string[]>; // tableName -> columnNames[]
+}
+
+export interface VirtualSchemaConfig {
+  enabled: boolean;
+  hiddenTables?: string[]; // Glob or table names e.g. ["credentials", "internal_audit", "admin_keys", "secret_*"]
+  hiddenColumns?: Record<string, string[]>; // tableName -> columnNames[]
+  roles?: Record<string, VirtualSchemaRoleConfig>;
+  defaultRole?: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  timestamp: string;
+  agentId?: string;
+  clientIp?: string;
+  sql: string;
+  operation: SqlOperationType;
+  riskLevel: RiskLevel;
+  riskScore: number;
+  targetTables: string[];
+  piiRedacted: boolean;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  decidedAt?: string;
+  decidedBy?: string;
+  reason?: string;
+}
+
+export type DistributedStoreType = "postgres" | "sqlite" | "mysql" | "redis";
+
+export interface DistributedStoreOperation {
+  storeId: string;
+  storeType: DistributedStoreType;
+  action: "SQL" | "KV_SET" | "KV_DEL" | "KV_EXPIRE";
+  queryOrKey: string;
+  paramsOrValue?: unknown;
+  estimatedImpact?: {
+    affectedRows?: number;
+    affectedKeys?: number;
+  };
+}
+
+export interface DistributedStoreDryRunResult {
+  storeId: string;
+  storeType: DistributedStoreType;
+  safe: boolean;
+  affectedRows?: number;
+  affectedKeys?: number;
+  rollbackVerified: boolean;
+  warnings: string[];
+  error?: string;
+}
+
+export interface DistributedDryRunResult {
+  safe: boolean;
+  distributedCommitToken?: string;
+  expiresAt?: string;
+  totalAffectedEntities: number;
+  storeResults: Record<string, DistributedStoreDryRunResult>;
+  warnings: string[];
+  rollbackVerified: boolean;
+}
+
+export interface DistributedCommitResult {
+  committed: boolean;
+  storeResults: Record<
+    string,
+    { success: boolean; affectedRows?: number; affectedKeys?: number; error?: string }
+  >;
+  distributedAuditId: string;
+}
+
 export interface SiemTelemetryConfig {
   enabled: boolean;
   endpoint: string; // Remote HTTP/HTTPS webhook or SIEM collector
@@ -227,6 +322,12 @@ export interface DBShieldConfig {
   metricsPort?: number; // Prometheus metrics & health HTTP port (default 9090)
   metricsHost?: string; // Prometheus metrics & health HTTP host (default "0.0.0.0")
   enableMetrics?: boolean; // Enable Prometheus metrics exporter (default true)
+  virtualSchema?: VirtualSchemaConfig;
+  enableVirtualSchema?: boolean; // Default false
+  enableDashboard?: boolean; // Default false
+  dashboardPort?: number; // Port for live query approval web dashboard (default 3100)
+  dashboardHost?: string; // Host for dashboard (default "0.0.0.0")
+  requireApprovalForMutations?: boolean; // Block sensitive mutations until approved via dashboard
 }
 
 export interface DatabaseAdapter {

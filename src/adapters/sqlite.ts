@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { parseSql, stripSqlComments } from "../guard/ast.js";
+import type { VirtualSchemaManager } from "../guard/virtual-schema.js";
 import type {
   ColumnDefinition,
   DatabaseAdapter,
@@ -21,17 +22,24 @@ export class SqliteAdapter implements DatabaseAdapter {
   private readonly defaultMaxRows: number;
   private readonly defaultMaxMutationRows: number;
   private readonly statementTimeoutMs: number;
+  private virtualSchema?: VirtualSchemaManager;
 
   constructor(
     storagePath = ":memory:",
     defaultMaxRows = 500,
     defaultMaxMutationRows = 50,
     statementTimeoutMs = 5000,
+    virtualSchema?: VirtualSchemaManager,
   ) {
     this.storagePath = storagePath;
     this.defaultMaxRows = defaultMaxRows;
     this.defaultMaxMutationRows = defaultMaxMutationRows;
     this.statementTimeoutMs = statementTimeoutMs;
+    this.virtualSchema = virtualSchema;
+  }
+
+  public setVirtualSchema(virtualSchema: VirtualSchemaManager): void {
+    this.virtualSchema = virtualSchema;
   }
 
   async connect(): Promise<void> {
@@ -112,11 +120,15 @@ export class SqliteAdapter implements DatabaseAdapter {
       }
 
       const executionTimeMs = Number((performance.now() - startTime).toFixed(2));
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : cols.map((c) => c.name);
+      let finalRows = rows;
+      if (this.virtualSchema?.isEnabled() && this.virtualSchema.isIntrospectionQuery(sql)) {
+        finalRows = this.virtualSchema.filterIntrospectionRows(rows, "sqlite");
+      }
+      const columns = finalRows.length > 0 ? Object.keys(finalRows[0]) : cols.map((c) => c.name);
 
       return {
-        rows,
-        rowCount: rows.length,
+        rows: finalRows,
+        rowCount: finalRows.length,
         columns,
         executionTimeMs,
         redactedColumns: [],
@@ -305,16 +317,22 @@ export class SqliteAdapter implements DatabaseAdapter {
     const schemas: TableSchema[] = [];
 
     for (const row of tableRows) {
+      if (this.virtualSchema?.isTableHidden(row.name)) {
+        continue;
+      }
       const schema = await this.getTableSchema(row.name);
       if (schema) {
         schemas.push(schema);
       }
     }
 
-    return schemas;
+    return this.virtualSchema ? this.virtualSchema.filterTableSchemas(schemas) : schemas;
   }
 
   async getTableSchema(tableName: string): Promise<TableSchema | null> {
+    if (this.virtualSchema?.isTableHidden(tableName)) {
+      return null;
+    }
     const db = this.ensureConnected();
     const safeName = tableName.replace(/[^a-zA-Z0-9_]/g, "");
 
@@ -370,12 +388,14 @@ export class SqliteAdapter implements DatabaseAdapter {
         });
       }
 
-      return {
+      const schema: TableSchema = {
         tableName: safeName,
         columns,
         foreignKeys,
         indexes,
       };
+
+      return this.virtualSchema ? this.virtualSchema.filterSingleTableSchema(schema) : schema;
     } catch {
       return null;
     }

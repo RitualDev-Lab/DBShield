@@ -13,3 +13,5 @@ export * from "./proxy/index.js";
 export * from "./configurator/index.js";
 export * from "./server/index.js";
 export * from "./metrics/index.js";
+export * from "./approval/index.js";
+export * from "./dashboard/index.js";

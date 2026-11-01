@@ -1,5 +1,8 @@
 import { stripSqlComments } from "../guard/ast.js";
 import type { DatabaseAdapter, ExplainReport } from "../types/index.js";
+import { QueryPlanAdvisor } from "./advisor.js";
+
+export { QueryPlanAdvisor };
 
 export class QueryExplainer {
   private readonly adapter: DatabaseAdapter;
@@ -118,7 +121,7 @@ export class QueryExplainer {
         );
       }
 
-      return {
+      const baseReport: ExplainReport = {
         rawPlan: rows,
         bottlenecks,
         suggestions,
@@ -127,6 +130,20 @@ export class QueryExplainer {
         estimatedRows,
         hasSeqScan,
       };
+
+      // Run missing index & query plan regressive advisor
+      if (hasSeqScan || !isIndexed) {
+        const advisorReport = QueryPlanAdvisor.analyze(sql, baseReport, this.adapter.dialect);
+        baseReport.advisorReport = advisorReport;
+        baseReport.missingIndexes = advisorReport.advice;
+        if (advisorReport.suggestedDdls.length > 0) {
+          baseReport.suggestions.push(
+            ...advisorReport.suggestedDdls.map((ddl) => `Suggested Index Fix: ${ddl}`),
+          );
+        }
+      }
+
+      return baseReport;
     } catch (err) {
       return {
         rawPlan: [],

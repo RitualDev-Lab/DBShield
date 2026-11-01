@@ -1,11 +1,17 @@
+import { VirtualSchemaManager } from "../guard/virtual-schema.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
 import { PostgresAdapter } from "./postgres.js";
 import { SqliteAdapter } from "./sqlite.js";
 
 export * from "./sqlite.js";
 export * from "./postgres.js";
+export * from "./redis.js";
 
 export function createDatabaseAdapter(config: DBShieldConfig): DatabaseAdapter {
+  const virtualSchema = config.virtualSchema
+    ? new VirtualSchemaManager(config.virtualSchema)
+    : undefined;
+
   switch (config.dialect) {
     case "sqlite":
       return new SqliteAdapter(
@@ -13,6 +19,7 @@ export function createDatabaseAdapter(config: DBShieldConfig): DatabaseAdapter {
         config.maxRowsPerRead,
         config.maxRowsPerMutation,
         config.statementTimeoutMs,
+        virtualSchema,
       );
     case "postgres":
       return new PostgresAdapter(

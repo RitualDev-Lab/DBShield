@@ -70,6 +70,28 @@ export const ConfigSchema = z.object({
   metricsPort: z.number().int().positive().default(9090),
   metricsHost: z.string().default("0.0.0.0"),
   enableMetrics: z.boolean().default(true),
+  enableVirtualSchema: z.boolean().default(false),
+  virtualSchema: z
+    .object({
+      enabled: z.boolean().default(true),
+      hiddenTables: z.array(z.string()).default([]),
+      hiddenColumns: z.record(z.array(z.string())).default({}),
+      roles: z
+        .record(
+          z.object({
+            allowedTables: z.array(z.string()).optional(),
+            deniedTables: z.array(z.string()).optional(),
+            deniedColumns: z.record(z.array(z.string())).optional(),
+          }),
+        )
+        .optional(),
+      defaultRole: z.string().default("agent"),
+    })
+    .optional(),
+  enableDashboard: z.boolean().default(false),
+  dashboardPort: z.number().int().positive().default(3100),
+  dashboardHost: z.string().default("0.0.0.0"),
+  requireApprovalForMutations: z.boolean().default(false),
 });
 
 export const DEFAULT_CONFIG: DBShieldConfig = {
@@ -112,6 +134,11 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   metricsPort: 9090,
   metricsHost: "0.0.0.0",
   enableMetrics: true,
+  enableVirtualSchema: false,
+  enableDashboard: false,
+  dashboardPort: 3100,
+  dashboardHost: "0.0.0.0",
+  requireApprovalForMutations: false,
 };
 
 export async function loadConfig(configPath?: string): Promise<DBShieldConfig> {

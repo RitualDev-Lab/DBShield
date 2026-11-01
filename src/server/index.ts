@@ -2,15 +2,17 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createDatabaseAdapter } from "../adapters/index.js";
+import { createDatabaseAdapter, InMemoryRedisAdapter } from "../adapters/index.js";
+import { ApprovalQueue } from "../approval/queue.js";
 import { AuditLogger } from "../audit/index.js";
 import { loadConfig } from "../config/index.js";
 import { CostGateEngine } from "../cost/index.js";
+import { DashboardServer } from "../dashboard/server.js";
 import { QueryExplainer } from "../explain/index.js";
 import { SqlGuardEngine } from "../guard/index.js";
 import { MigrationSafetyEngine } from "../migration/index.js";
 import { type PiiRedactionReport, PiiRedactor } from "../pii/index.js";
-import { SandboxEngine } from "../sandbox/index.js";
+import { DistributedSandboxEngine, SandboxEngine } from "../sandbox/index.js";
 import { SemanticIntentGuard } from "../semantic/index.js";
 import type { DBShieldConfig, DatabaseAdapter } from "../types/index.js";
 
@@ -20,6 +22,9 @@ export interface McpServerInstance {
   config: DBShieldConfig;
   guardEngine: SqlGuardEngine;
   sandboxEngine: SandboxEngine;
+  distributedSandbox: DistributedSandboxEngine;
+  approvalQueue: ApprovalQueue;
+  dashboardServer?: DashboardServer;
   piiRedactor: PiiRedactor;
   auditLogger: AuditLogger;
   explainer: QueryExplainer;
@@ -41,12 +46,22 @@ export async function createMcpServer(
 
   const guardEngine = new SqlGuardEngine(config);
   const sandboxEngine = new SandboxEngine(adapter, guardEngine, config);
+  const distributedSandbox = new DistributedSandboxEngine(config);
+  distributedSandbox.registerStore(config.dialect, adapter);
+  distributedSandbox.registerStore("redis", new InMemoryRedisAdapter());
+
+  const approvalQueue = new ApprovalQueue();
   const piiRedactor = new PiiRedactor(config.customPiiColumns);
   const auditLogger = new AuditLogger(config.auditLogPath, 500, piiRedactor);
   const explainer = new QueryExplainer(adapter);
   const costGateEngine = new CostGateEngine(config, explainer);
   const migrationEngine = new MigrationSafetyEngine(config);
   const semanticGuard = new SemanticIntentGuard(config);
+
+  let dashboardServer: DashboardServer | undefined;
+  if (config.enableDashboard) {
+    dashboardServer = new DashboardServer(config, approvalQueue, auditLogger);
+  }
 
   const server = new McpServer({
     name: "dbshield",
@@ -196,6 +211,45 @@ export async function createMcpServer(
             },
           ],
         };
+      }
+
+      // Check Human-In-The-Loop Live Query Approval Gate
+      if (
+        config.requireApprovalForMutations &&
+        ["UPDATE", "DELETE", "INSERT", "DDL_DROP", "DDL_TRUNCATE"].includes(evaluation.operation)
+      ) {
+        const approvalReq = approvalQueue.enqueue({
+          sql,
+          operation: evaluation.operation,
+          riskLevel: evaluation.riskLevel,
+          riskScore: evaluation.riskScore,
+          targetTables: evaluation.targetTables,
+          piiRedacted: config.enablePiiMasking,
+        });
+
+        dashboardServer?.broadcastEvent("approval", approvalReq);
+
+        const decision = await approvalQueue.waitForDecision(approvalReq.id, 5000);
+        if (decision !== "APPROVED") {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    status: "APPROVAL_PENDING_OR_REJECTED",
+                    approvalId: approvalReq.id,
+                    decision,
+                    message: `Mutation on table(s) [${evaluation.targetTables.join(", ")}] requires human review in the DBShield live dashboard feed.`,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
       }
 
       if (evaluation.requiresDryRun) {
@@ -890,12 +944,72 @@ export async function createMcpServer(
     },
   );
 
+  // Multi-Store Distributed Dry-Run tool
+  server.tool(
+    "db_distributed_dry_run",
+    "Simulate atomic mutations across multi-store environments (e.g. PostgreSQL + Redis + SQLite) and receive a single distributed commit token.",
+    {
+      operations: z.array(
+        z.object({
+          storeId: z.string(),
+          storeType: z.enum(["postgres", "sqlite", "mysql", "redis"]),
+          action: z.enum(["SQL", "KV_SET", "KV_DEL", "KV_EXPIRE"]),
+          queryOrKey: z.string(),
+          paramsOrValue: z.unknown().optional(),
+        }),
+      ),
+    },
+    async ({ operations }) => {
+      const res = await distributedSandbox.dryRun(operations as any);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(res, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  // Multi-Store Distributed Commit tool
+  server.tool(
+    "db_distributed_commit",
+    "Execute two-phase distributed commit across multi-store environments using an authorized distributed dry-run token.",
+    {
+      token: z.string(),
+      operations: z.array(
+        z.object({
+          storeId: z.string(),
+          storeType: z.enum(["postgres", "sqlite", "mysql", "redis"]),
+          action: z.enum(["SQL", "KV_SET", "KV_DEL", "KV_EXPIRE"]),
+          queryOrKey: z.string(),
+          paramsOrValue: z.unknown().optional(),
+        }),
+      ),
+    },
+    async ({ token, operations }) => {
+      const res = await distributedSandbox.commit(token, operations as any);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(res, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
   return {
     server,
     adapter,
     config,
     guardEngine,
     sandboxEngine,
+    distributedSandbox,
+    approvalQueue,
+    dashboardServer,
     piiRedactor,
     auditLogger,
     explainer,
@@ -903,6 +1017,9 @@ export async function createMcpServer(
     migrationEngine,
     semanticGuard,
     async start() {
+      if (dashboardServer) {
+        await dashboardServer.start();
+      }
       const transport = new StdioServerTransport();
       await server.connect(transport);
       console.error(
@@ -910,6 +1027,9 @@ export async function createMcpServer(
       );
     },
     async stop() {
+      if (dashboardServer) {
+        await dashboardServer.stop();
+      }
       await adapter.disconnect();
       await server.close();
     },

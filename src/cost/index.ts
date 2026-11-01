@@ -135,6 +135,9 @@ export class CostGateEngine {
       } else {
         warnings.push("Sequential scan detected on unindexed table; consider adding indexes.");
       }
+      if (explainReport.advisorReport?.alerts) {
+        warnings.push(...explainReport.advisorReport.alerts);
+      }
     }
 
     // Check 4: Unbounded Scan without LIMIT in STRICT Tier

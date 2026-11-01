@@ -7,16 +7,26 @@ import type {
 } from "../types/index.js";
 import { type ParsedStatement, parseSql, stripSqlComments } from "./ast.js";
 import { evaluateWhereClause } from "./tautology.js";
+import { VirtualSchemaManager } from "./virtual-schema.js";
 
 export class SqlGuardEngine {
   private config: DBShieldConfig;
+  private virtualSchema: VirtualSchemaManager;
 
   constructor(config: DBShieldConfig) {
     this.config = config;
+    this.virtualSchema = new VirtualSchemaManager(config.virtualSchema);
   }
 
   public updateConfig(newConfig: Partial<DBShieldConfig>): void {
     this.config = { ...this.config, ...newConfig };
+    if (newConfig.virtualSchema) {
+      this.virtualSchema.updateConfig(newConfig.virtualSchema);
+    }
+  }
+
+  public getVirtualSchemaManager(): VirtualSchemaManager {
+    return this.virtualSchema;
   }
 
   public evaluate(sql: string): GuardrailEvaluation {
@@ -191,6 +201,15 @@ export class SqlGuardEngine {
       default: {
         riskScore = 20;
         warnings.push(`Unrecognized or non-standard SQL statement type: ${op}`);
+      }
+    }
+
+    // Evaluate virtual schema masking & column RBAC
+    if (this.virtualSchema.isEnabled()) {
+      const rbacEval = this.virtualSchema.evaluateAccess(stmt.rawSql, this.config.dialect);
+      if (!rbacEval.allowed) {
+        riskScore = Math.max(riskScore, 95);
+        violations.push(...rbacEval.violations);
       }
     }
 

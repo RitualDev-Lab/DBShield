@@ -39,6 +39,10 @@ When autonomous AI coding agents interact directly with databases:
 - 🔒 **Dynamic Zero-Leak PII Masking**: Automatically detects sensitive fields (passwords, emails, phone numbers, tokens) and masks them before streaming back to LLM context.
 - 📐 **Safe Schema Introspection**: Exposes rich table definitions, foreign keys, and indexes without exposing data rows.
 - 🎛️ **Granular Safety Tiers**: Choose between `STRICT` (read-only / 1-row limits), `BALANCED` (production guardrails), or `PERMISSIVE` (custom rules).
+- 🎭 **Virtual Schema Masking & Column-Level RBAC**: Hides sensitive internal tables (`credentials`, `internal_audit`, `admin_*`) from `information_schema` / catalog introspection and masks restricted columns from agent context.
+- ⚡ **Missing Index & Query Plan Regressive Advisor**: Detects full-table sequential scans on unindexed tables and automatically synthesizes optimal `CREATE INDEX [CONCURRENTLY]` DDL statements with cost regression alerting.
+- 📺 **Real-time Live Query Approval Feed**: Zero-dependency web dashboard (`:3100`) streaming live agent queries, risk scores, and PII redactions, featuring 1-click **"Approve / Reject"** buttons for sensitive mutations.
+- 🌐 **Multi-Store Distributed Dry-Run**: Extends the two-phase commit token manager to coordinate atomic simulations and commits across distributed multi-store stacks (PostgreSQL + Redis + SQLite).
 - 🔌 **Universal MCP Protocol**: Drop-in compatible with Claude Desktop, Cursor, Antigravity, Windsurf, and custom Agent frameworks.
 
 ---
@@ -92,6 +96,13 @@ npx @ritualdev-lab/dbshield status
 npx @ritualdev-lab/dbshield init
 ```
 
+### 5. Live Query Approval Feed & Web Dashboard
+Start the real-time query approval web interface (`:3100`):
+```bash
+npx @ritualdev-lab/dbshield dashboard --port 3100
+```
+Open `http://localhost:3100` to inspect live agent queries, risk scores, PII redactions, and 1-click **"Approve / Reject"** buttons for sensitive mutations.
+
 ---
 
 ## ⚙️ Configuration (`dbshield.config.json`)
@@ -133,6 +144,8 @@ npx @ritualdev-lab/dbshield init
 | `db_validate_migration` | Validate DDL migration scripts for lock hazards and generate zero-downtime execution recipes. |
 | `db_check_schema_drift` | Audit live database foreign keys for missing indexes and detect structural schema drift. |
 | `db_check_semantic_intent` | Check stated English user intent against SQL AST target columns to stop unauthorized privilege/financial mutations. |
+| `db_distributed_dry_run` | Simulate atomic mutations across multi-store environments (Postgres, SQLite, Redis) and receive unified token. |
+| `db_distributed_commit` | Execute two-phase distributed commit across multi-store environments with cryptographic tamper verification. |
 
 ---
 

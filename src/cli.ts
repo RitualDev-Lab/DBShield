@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config/index.js";
 import { installClaude, installCursor } from "./configurator/index.js";
+import { DashboardServer } from "./dashboard/index.js";
 import { PostgresWireProxy } from "./proxy/index.js";
 import { createMcpServer } from "./server/index.js";
 
@@ -19,6 +20,7 @@ const HELP_TEXT = `
   COMMANDS:
     start            Launch the MCP server on stdio transport (default)
     proxy            Launch PostgreSQL wire-protocol proxy on TCP port (default: 5433)
+    dashboard        Launch real-time live query approval feed & web dashboard (default: 3100)
     status           Inspect database connection and active security parameters
     init             Generate a default dbshield.config.json in the current directory
     install-claude   Automatically configure Claude Desktop to use DBShield
@@ -78,6 +80,34 @@ async function main() {
     case "start": {
       const serverInstance = await createMcpServer();
       await serverInstance.start();
+      break;
+    }
+
+    case "dashboard": {
+      const config = await loadConfig();
+      const portIdx = args.indexOf("--port");
+      const port =
+        portIdx !== -1 && args[portIdx + 1]
+          ? Number.parseInt(args[portIdx + 1], 10)
+          : config.dashboardPort || 3100;
+
+      const dashboard = new DashboardServer(config);
+      await dashboard.start(port);
+      console.log(`
+🛡️  DBShield Live Query Approval Feed & Defense Dashboard
+────────────────────────────────────────────────────────
+Live Web UI:       http://localhost:${dashboard.getPort()}
+Real-time Stream:  http://localhost:${dashboard.getPort()}/api/stream
+Approvals API:     http://localhost:${dashboard.getPort()}/api/approvals
+Healthz Endpoint:  http://localhost:${dashboard.getPort()}/healthz
+Safety Tier:       ${config.safetyTier}
+
+Press Ctrl+C to stop dashboard.
+`);
+      process.on("SIGINT", async () => {
+        await dashboard.stop();
+        process.exit(0);
+      });
       break;
     }
 
