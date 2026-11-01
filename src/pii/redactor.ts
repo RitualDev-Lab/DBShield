@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+import type { CustomPiiRule } from "../types/index.js";
 import { PII_RULES, type PiiCategoryRule } from "./patterns.js";
 
 export interface PiiRedactionReport {
@@ -7,11 +9,86 @@ export interface PiiRedactionReport {
   totalFieldsRedacted: number;
 }
 
+export interface PiiRedactorOptions {
+  customColumns?: string[];
+  customRules?: CustomPiiRule[];
+  enableFormatPreserving?: boolean;
+  salt?: string;
+}
+
+/**
+ * Deterministic, keyed format-preserving pseudonymization.
+ * Preserves referential integrity across relational tables during AI agent test runs.
+ */
+export function formatPreservingPseudonym(
+  value: string,
+  category: string,
+  salt = "dbshield-default-salt",
+): string {
+  const hash = crypto.createHmac("sha256", salt).update(value).digest("hex");
+  const shortHash = hash.slice(0, 8);
+
+  switch (category.toUpperCase()) {
+    case "EMAIL": {
+      const atIdx = value.indexOf("@");
+      const domain = atIdx > 0 ? value.slice(atIdx) : "@masked.local";
+      return `user_${shortHash}${domain}`;
+    }
+    case "PHONE": {
+      const digits = value.replace(/\D/g, "");
+      const last4 = digits.slice(-4) || "0000";
+      return `+***-***-${last4}`;
+    }
+    case "CREDIT_CARD": {
+      const digits = value.replace(/\D/g, "");
+      const last4 = digits.slice(-4) || "0000";
+      return `****-****-****-${last4}`;
+    }
+    case "SSN_OR_NATIONAL_ID": {
+      const digits = value.replace(/\D/g, "");
+      const last4 = digits.slice(-4) || "0000";
+      return `***-**-${last4}`;
+    }
+    case "UUID":
+    case "ID": {
+      const p1 = hash.slice(0, 8);
+      const p2 = hash.slice(8, 12);
+      const p3 = `4${hash.slice(13, 16)}`;
+      const p4 = `8${hash.slice(17, 20)}`;
+      const p5 = hash.slice(20, 32);
+      return `${p1}-${p2}-${p3}-${p4}-${p5}`;
+    }
+    default: {
+      return `[MASKED_${category}_${shortHash}]`;
+    }
+  }
+}
+
 export class PiiRedactor {
   private readonly customColumns: Set<string>;
+  private readonly customRules: CustomPiiRule[];
+  private readonly enableFormatPreserving: boolean;
+  private readonly salt: string;
 
-  constructor(customColumns: string[] = []) {
-    this.customColumns = new Set(customColumns.map((c) => c.toLowerCase().trim()));
+  constructor(
+    customColumnsOrOptions: string[] | PiiRedactorOptions = [],
+    customRules: CustomPiiRule[] = [],
+    enableFormatPreserving = false,
+    salt = "dbshield-default-salt",
+  ) {
+    if (Array.isArray(customColumnsOrOptions)) {
+      this.customColumns = new Set(customColumnsOrOptions.map((c) => c.toLowerCase().trim()));
+      this.customRules = customRules;
+      this.enableFormatPreserving = enableFormatPreserving;
+      this.salt = salt;
+    } else {
+      this.customColumns = new Set(
+        (customColumnsOrOptions.customColumns || []).map((c) => c.toLowerCase().trim()),
+      );
+      this.customRules = customColumnsOrOptions.customRules || [];
+      this.enableFormatPreserving = customColumnsOrOptions.enableFormatPreserving ?? false;
+      this.salt = customColumnsOrOptions.salt || "dbshield-default-salt";
+    }
   }
 
   public redactRows(
@@ -55,30 +132,63 @@ export class PiiRedactor {
   public redactCell(
     columnName: string,
     value: unknown,
-    customColumns: Set<string>,
+    customColumns: Set<string> = this.customColumns,
   ): { value: unknown; redacted: boolean; category?: string } {
     if (value === null || value === undefined) {
       return { value, redacted: false };
     }
 
     const colLower = columnName.toLowerCase();
+    const strVal = typeof value === "string" ? value : String(value);
+
+    // Check custom configured PII rules (patterns and column regex)
+    for (const rule of this.customRules) {
+      if (rule.columnPattern && new RegExp(rule.columnPattern, "i").test(colLower)) {
+        const masked =
+          rule.formatPreserving || this.enableFormatPreserving
+            ? formatPreservingPseudonym(strVal, rule.name, this.salt)
+            : rule.replacement || `[REDACTED_${rule.name.toUpperCase()}]`;
+        return {
+          value: masked,
+          redacted: true,
+          category: rule.name,
+        };
+      }
+      if (rule.pattern) {
+        const rx = new RegExp(rule.pattern, "gi");
+        if (rx.test(strVal)) {
+          const replacement =
+            rule.formatPreserving || this.enableFormatPreserving
+              ? formatPreservingPseudonym(strVal, rule.name, this.salt)
+              : rule.replacement || `[REDACTED_${rule.name.toUpperCase()}]`;
+          const replaced = strVal.replace(rx, replacement);
+          return {
+            value: replaced,
+            redacted: true,
+            category: rule.name,
+          };
+        }
+      }
+    }
 
     // Check custom configured PII columns
     if (customColumns.has(colLower)) {
       return {
-        value: "[REDACTED_CUSTOM]",
+        value: this.enableFormatPreserving
+          ? formatPreservingPseudonym(strVal, "CUSTOM", this.salt)
+          : "[REDACTED_CUSTOM]",
         redacted: true,
         category: "CUSTOM",
       };
     }
 
-    const strVal = typeof value === "string" ? value : String(value);
-
     // Check column name heuristics
     for (const rule of PII_RULES) {
       if (rule.columnRegex.test(colLower)) {
         return {
-          value: rule.mask(strVal),
+          value: this.enableFormatPreserving
+            ? formatPreservingPseudonym(strVal, rule.category, this.salt)
+            : rule.mask(strVal),
           redacted: true,
           category: rule.category,
         };
@@ -95,7 +205,11 @@ export class PiiRedactor {
         if (rule.valueRegex) {
           const globalRegex = new RegExp(rule.valueRegex.source, "gi");
           if (globalRegex.test(currentVal)) {
-            currentVal = currentVal.replace(globalRegex, (match) => rule.mask(match));
+            currentVal = currentVal.replace(globalRegex, (match) =>
+              this.enableFormatPreserving
+                ? formatPreservingPseudonym(match, rule.category, this.salt)
+                : rule.mask(match),
+            );
             matchedCategory = rule.category;
             modified = true;
           }

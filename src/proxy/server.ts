@@ -1,5 +1,5 @@
 import net from "node:net";
-import { AuditLogger } from "../audit/index.js";
+import { AuditLogger, SiemTelemetryStreamer } from "../audit/index.js";
 import { DEFAULT_CONFIG } from "../config/index.js";
 import { SqlGuardEngine } from "../guard/engine.js";
 import { type MetricsRegistry, MetricsServer, getGlobalMetrics } from "../metrics/index.js";
@@ -26,6 +26,9 @@ export interface PostgresWireProxyOptions {
   metricsPort?: number;
   metricsHost?: string;
   metricsRegistry?: MetricsRegistry;
+  enableReadReplicaRouting?: boolean;
+  readReplicaHost?: string;
+  readReplicaPort?: number;
 }
 
 export interface ProxyStats {
@@ -34,6 +37,8 @@ export interface ProxyStats {
   queriesProcessed: number;
   queriesAllowed: number;
   queriesIntercepted: number;
+  routedToPrimary: number;
+  routedToReplica: number;
 }
 
 export class PostgresWireProxy {
@@ -55,6 +60,9 @@ export class PostgresWireProxy {
   public readonly enableMetrics: boolean;
   public readonly metricsPort: number;
   public readonly metricsHost: string;
+  public readonly enableReadReplicaRouting: boolean;
+  public readonly readReplicaHost?: string;
+  public readonly readReplicaPort: number;
 
   private stats: ProxyStats = {
     activeConnections: 0,
@@ -62,6 +70,8 @@ export class PostgresWireProxy {
     queriesProcessed: 0,
     queriesAllowed: 0,
     queriesIntercepted: 0,
+    routedToPrimary: 0,
+    routedToReplica: 0,
   };
 
   constructor(options: PostgresWireProxyOptions = {}) {
@@ -75,8 +85,15 @@ export class PostgresWireProxy {
     this.metricsPort = options.metricsPort ?? this.config.metricsPort ?? 9090;
     this.metricsHost = options.metricsHost ?? this.config.metricsHost ?? "0.0.0.0";
     this.metricsRegistry = options.metricsRegistry || getGlobalMetrics();
+    this.enableReadReplicaRouting =
+      options.enableReadReplicaRouting ?? this.config.enableReadReplicaRouting ?? false;
+    this.readReplicaHost = options.readReplicaHost ?? this.config.readReplicaHost;
+    this.readReplicaPort = options.readReplicaPort ?? this.config.readReplicaPort ?? 5432;
 
     this.logger = options.logger || new AuditLogger(this.config.auditLogPath);
+    if (this.config.siemTelemetry?.enabled && !this.logger.getSiemStreamer()) {
+      this.logger.setSiemStreamer(new SiemTelemetryStreamer(this.config.siemTelemetry));
+    }
     this.sqlGuard = new SqlGuardEngine(this.config);
     this.migrationGuard = new MigrationSafetyEngine(this.config);
     this.semanticGuard = new SemanticIntentGuard(this.config);
@@ -176,12 +193,48 @@ export class PostgresWireProxy {
     const upstreamSocket = new net.Socket();
     this.activeSockets.add(upstreamSocket);
 
+    // Optional Read-Replica upstream connection
+    let replicaSocket: net.Socket | null = null;
+    let replicaConnected = false;
+    const queuedReplicaPackets: Buffer[] = [];
+    let activeQueryTarget: "primary" | "replica" = "primary";
+
+    if (this.enableReadReplicaRouting && this.readReplicaHost) {
+      const activeReplica = new net.Socket();
+      replicaSocket = activeReplica;
+      this.activeSockets.add(activeReplica);
+
+      activeReplica.connect(this.readReplicaPort, this.readReplicaHost, () => {
+        replicaConnected = true;
+        while (queuedReplicaPackets.length > 0) {
+          const pkt = queuedReplicaPackets.shift();
+          if (pkt && !activeReplica.destroyed) activeReplica.write(pkt);
+        }
+      });
+
+      replicaSocket.on("data", (data) => {
+        if (!clientSocket.destroyed && activeQueryTarget === "replica") {
+          clientSocket.write(data);
+        }
+      });
+
+      replicaSocket.on("error", () => {
+        // Fallback gracefully to primary if replica is unreachable
+      });
+
+      replicaSocket.on("close", () => {
+        if (replicaSocket) this.activeSockets.delete(replicaSocket);
+      });
+    }
+
     clientSocket.on("close", () => {
       this.activeSockets.delete(clientSocket);
       this.metricsRegistry.connectionsActive.dec();
       if (this.verbose) {
         console.log("🔌 [DISCONNECT] Client disconnected");
       }
+      if (!upstreamSocket.destroyed) upstreamSocket.end();
+      if (replicaSocket && !replicaSocket.destroyed) replicaSocket.end();
     });
     upstreamSocket.on("close", () => {
       this.activeSockets.delete(upstreamSocket);
@@ -198,7 +251,7 @@ export class PostgresWireProxy {
 
     // Pipe upstream responses back to client
     upstreamSocket.on("data", (data) => {
-      if (!clientSocket.destroyed) {
+      if (!clientSocket.destroyed && activeQueryTarget === "primary") {
         clientSocket.write(data);
       }
     });
@@ -253,6 +306,13 @@ export class PostgresWireProxy {
           if (message.type === "StartupMessage") {
             expectingStartup = false;
             forwardToUpstream(message.raw);
+            if (replicaSocket) {
+              if (replicaConnected && !replicaSocket.destroyed) {
+                replicaSocket.write(message.raw);
+              } else {
+                queuedReplicaPackets.push(message.raw);
+              }
+            }
             continue;
           }
 
@@ -366,7 +426,24 @@ export class PostgresWireProxy {
             operation: evaluation.operation,
           });
 
-          forwardToUpstream(message.raw);
+          const isSelect = evaluation.operation === "SELECT";
+          const shouldRouteToReplica =
+            this.enableReadReplicaRouting && Boolean(this.readReplicaHost) && isSelect;
+
+          if (shouldRouteToReplica) {
+            this.stats.routedToReplica++;
+            if (replicaSocket && replicaConnected && !replicaSocket.destroyed) {
+              activeQueryTarget = "replica";
+              replicaSocket.write(message.raw);
+            } else {
+              activeQueryTarget = "primary";
+              forwardToUpstream(message.raw);
+            }
+          } else {
+            this.stats.routedToPrimary++;
+            activeQueryTarget = "primary";
+            forwardToUpstream(message.raw);
+          }
           continue;
         }
 

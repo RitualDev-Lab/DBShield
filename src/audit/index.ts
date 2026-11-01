@@ -2,6 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { PiiRedactor } from "../pii/redactor.js";
 import type { RiskLevel, SqlOperationType } from "../types/index.js";
+import { type SiemStreamStats, SiemTelemetryStreamer } from "./siem.js";
+
+export { SiemTelemetryStreamer, type SiemStreamStats };
 
 export interface AuditLogEntry {
   auditId: string;
@@ -29,11 +32,26 @@ export class AuditLogger {
   private readonly maxBufferSize: number;
   private readonly logFilePath?: string;
   private readonly redactor: PiiRedactor;
+  private siemStreamer?: SiemTelemetryStreamer;
 
-  constructor(logFilePath?: string, maxBufferSize = 500, redactor?: PiiRedactor) {
+  constructor(
+    logFilePath?: string,
+    maxBufferSize = 500,
+    redactor?: PiiRedactor,
+    siemStreamer?: SiemTelemetryStreamer,
+  ) {
     this.logFilePath = logFilePath;
     this.maxBufferSize = maxBufferSize;
     this.redactor = redactor || new PiiRedactor();
+    this.siemStreamer = siemStreamer;
+  }
+
+  public setSiemStreamer(streamer: SiemTelemetryStreamer): void {
+    this.siemStreamer = streamer;
+  }
+
+  public getSiemStreamer(): SiemTelemetryStreamer | undefined {
+    return this.siemStreamer;
   }
 
   public async log(entry: AuditLogEntry): Promise<void> {
@@ -56,6 +74,15 @@ export class AuditLogger {
         await fs.appendFile(this.logFilePath, line, "utf8");
       } catch {
         // Non-fatal if file write fails in restricted environments
+      }
+    }
+
+    // Stream telemetry to remote SIEM / webhook if configured
+    if (this.siemStreamer) {
+      try {
+        await this.siemStreamer.enqueue(sanitizedEntry);
+      } catch {
+        // Non-fatal if SIEM enqueue fails
       }
     }
   }

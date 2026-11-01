@@ -23,6 +23,7 @@ export interface PostgresAdapterOptions {
   database?: string;
   ssl?: pg.PoolConfig["ssl"];
   maxConnections?: number;
+  poolSize?: number;
   idleTimeoutMillis?: number;
   connectionTimeoutMillis?: number;
   defaultMaxRows?: number;
@@ -76,12 +77,30 @@ export class PostgresAdapter implements DatabaseAdapter {
       if (optTimeout !== undefined) this.statementTimeoutMs = optTimeout;
 
       this.config = {
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 5000,
+        max: poolConfig.maxConnections ?? poolConfig.poolSize ?? 10,
+        idleTimeoutMillis: poolConfig.idleTimeoutMillis ?? 30000,
+        connectionTimeoutMillis: poolConfig.connectionTimeoutMillis ?? 5000,
         ...poolConfig,
       };
     }
+  }
+
+  /**
+   * Returns runtime connection pool metrics (total, idle, waiting, max).
+   */
+  public getPoolStats(): {
+    totalCount: number;
+    idleCount: number;
+    waitingCount: number;
+    max: number;
+  } {
+    const pool = this.getPool();
+    return {
+      totalCount: pool.totalCount,
+      idleCount: pool.idleCount,
+      waitingCount: pool.waitingCount,
+      max: Number(this.config.max || 10),
+    };
   }
 
   /**

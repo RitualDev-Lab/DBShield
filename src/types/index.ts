@@ -163,6 +163,25 @@ export interface SemanticEvaluationResult {
   suggestion?: string;
 }
 
+export interface CustomPiiRule {
+  name: string;
+  pattern?: string; // Regex string for cell value
+  columnPattern?: string; // Regex string for column name
+  replacement?: string; // Custom replacement template e.g. "[REDACTED_<NAME>]"
+  formatPreserving?: boolean; // When true, deterministic pseudonym preserves referential integrity
+}
+
+export interface SiemTelemetryConfig {
+  enabled: boolean;
+  endpoint: string; // Remote HTTP/HTTPS webhook or SIEM collector
+  format?: "webhook" | "datadog" | "elasticsearch" | "agentshield";
+  authToken?: string; // Bearer token or API key
+  batchSize?: number; // Maximum events to queue before flushing (default 10)
+  flushIntervalMs?: number; // Periodic flush interval in milliseconds (default 5000)
+  streamBlockedOnly?: boolean;
+  headers?: Record<string, string>; // Additional custom headers
+}
+
 export interface DBShieldConfig {
   dialect: DatabaseDialect;
   connectionString?: string;
@@ -174,7 +193,11 @@ export interface DBShieldConfig {
   allowDestructiveDDL: boolean; // Default false
   enablePiiMasking: boolean; // Default true
   customPiiColumns?: string[];
+  customPiiRules?: CustomPiiRule[];
+  enableFormatPreservingPii?: boolean;
+  piiPseudonymSalt?: string;
   auditLogPath?: string;
+  siemTelemetry?: SiemTelemetryConfig;
   enableCostGate: boolean; // Phase 2: Runaway query and cost gate (default true)
   maxEstimatedCost: number; // Maximum query planner cost allowed (default 50000 in BALANCED, 10000 in STRICT)
   warnEstimatedCost?: number; // Soft warning cost threshold (default 10000)
@@ -192,6 +215,15 @@ export interface DBShieldConfig {
   proxyHost?: string; // Host for PostgreSQL TCP wire proxy (default "127.0.0.1")
   upstreamHost?: string; // Upstream target PostgreSQL host (default "127.0.0.1")
   upstreamPort?: number; // Upstream target PostgreSQL port (default 5432)
+  mysqlProxyPort?: number; // Port for MySQL TCP wire proxy (default 3307)
+  mysqlUpstreamHost?: string; // Upstream target MySQL host (default "127.0.0.1")
+  mysqlUpstreamPort?: number; // Upstream target MySQL port (default 3306)
+  poolSize?: number; // Connection pool capacity (default 10)
+  idleTimeoutMillis?: number; // Connection idle timeout (default 30000ms)
+  connectionTimeoutMillis?: number; // Connection timeout (default 5000ms)
+  enableReadReplicaRouting?: boolean; // Enable automatic read/write splitting
+  readReplicaHost?: string; // Target read-replica host for pure SELECT queries
+  readReplicaPort?: number; // Target read-replica port
   metricsPort?: number; // Prometheus metrics & health HTTP port (default 9090)
   metricsHost?: string; // Prometheus metrics & health HTTP host (default "0.0.0.0")
   enableMetrics?: boolean; // Enable Prometheus metrics exporter (default true)

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { stripSqlComments } from "../guard/ast.js";
+import { parseSql, stripSqlComments } from "../guard/ast.js";
 import type {
   ColumnDefinition,
   DatabaseAdapter,
@@ -192,26 +192,40 @@ export class SqliteAdapter implements DatabaseAdapter {
     let affectedRows = 0;
     let rollbackVerified = false;
 
-    db.exec("BEGIN TRANSACTION;");
+    let targetTables: string[] = [];
+    try {
+      const parsed = parseSql(sql, "sqlite");
+      if (parsed.statements && parsed.statements.length > 0) {
+        targetTables = parsed.statements[0].targetTables || [];
+      }
+    } catch {
+      // Fallback
+    }
+
+    const savepointName = `dbshield_sp_${randomUUID().replace(/-/g, "")}`;
+    db.exec(`SAVEPOINT ${savepointName};`);
+
     try {
       const stmt = db.prepare(sql);
       const res = stmt.run(...(params as SqliteParam[]));
       affectedRows = Number(res.changes || 0);
 
-      // Verify transaction rollback
-      db.exec("ROLLBACK;");
+      // Verify transaction rollback via savepoint
+      db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`);
+      db.exec(`RELEASE SAVEPOINT ${savepointName};`);
       rollbackVerified = true;
     } catch (error) {
       try {
-        db.exec("ROLLBACK;");
+        db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`);
+        db.exec(`RELEASE SAVEPOINT ${savepointName};`);
       } catch {
-        // Already rolled back or failed before begin
+        // Rollback fallback
       }
       warnings.push(`Dry-run execution failed: ${(error as Error).message}`);
       return {
         safe: false,
         simulatedAffectedRows: 0,
-        targetTables: [],
+        targetTables,
         executionTimeMs: Number((performance.now() - startTime).toFixed(2)),
         warnings,
         rollbackVerified: false,
@@ -223,7 +237,7 @@ export class SqliteAdapter implements DatabaseAdapter {
     return {
       safe: true,
       simulatedAffectedRows: affectedRows,
-      targetTables: [],
+      targetTables,
       executionTimeMs,
       warnings,
       rollbackVerified,
