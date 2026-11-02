@@ -2,20 +2,32 @@ import http from "node:http";
 import { type AddressInfo } from "node:net";
 import { ApprovalQueue } from "../approval/queue.js";
 import { type AuditLogEntry, AuditLogger } from "../audit/index.js";
-import type { DBShieldConfig } from "../types/index.js";
+import { SsoAuthenticator } from "../auth/sso.js";
+import { ComplianceReporter } from "../compliance/reporter.js";
+import type { DBShieldConfig, SsoUser } from "../types/index.js";
 
 export class DashboardServer {
   private server: http.Server | null = null;
   private readonly config: DBShieldConfig;
   private readonly approvalQueue: ApprovalQueue;
   private readonly auditLogger?: AuditLogger;
+  private readonly ssoAuthenticator?: SsoAuthenticator;
+  private readonly complianceReporter: ComplianceReporter;
   private sseClients: Set<http.ServerResponse> = new Set();
   private listenPort = 3100;
 
-  constructor(config: DBShieldConfig, approvalQueue?: ApprovalQueue, auditLogger?: AuditLogger) {
+  constructor(
+    config: DBShieldConfig,
+    approvalQueue?: ApprovalQueue,
+    auditLogger?: AuditLogger,
+    ssoAuthenticator?: SsoAuthenticator,
+  ) {
     this.config = config;
     this.approvalQueue = approvalQueue || new ApprovalQueue();
     this.auditLogger = auditLogger;
+    this.ssoAuthenticator =
+      ssoAuthenticator || (config.sso ? new SsoAuthenticator(config.sso) : undefined);
+    this.complianceReporter = new ComplianceReporter(config, auditLogger);
     this.listenPort = config.dashboardPort || 3100;
 
     // Broadcast new approval requests to all connected SSE clients
@@ -26,6 +38,14 @@ export class DashboardServer {
 
   public getApprovalQueue(): ApprovalQueue {
     return this.approvalQueue;
+  }
+
+  public getSsoAuthenticator(): SsoAuthenticator | undefined {
+    return this.ssoAuthenticator;
+  }
+
+  public getComplianceReporter(): ComplianceReporter {
+    return this.complianceReporter;
   }
 
   public getPort(): number {
@@ -91,7 +111,51 @@ export class DashboardServer {
     }
   }
 
-  private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
+  private extractToken(req: http.IncomingMessage): string | null {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+      return authHeader.slice(7).trim();
+    }
+    const cookieHeader = req.headers.cookie;
+    if (cookieHeader) {
+      const parts = cookieHeader.split(";").map((p) => p.trim());
+      for (const p of parts) {
+        if (p.startsWith("dbshield_session=")) {
+          return p.slice("dbshield_session=".length).trim();
+        }
+      }
+    }
+    return null;
+  }
+
+  private authenticateUser(req: http.IncomingMessage): { authenticated: boolean; user?: SsoUser } {
+    if (!this.ssoAuthenticator || !this.ssoAuthenticator.isEnabled()) {
+      return {
+        authenticated: true,
+        user: {
+          id: "local_admin",
+          email: "developer@local",
+          roles: ["admin", "approver"],
+          provider: "oidc",
+          issuedAt: Math.floor(Date.now() / 1000),
+          expiresAt: Math.floor(Date.now() / 1000) + 86400,
+        },
+      };
+    }
+
+    const token = this.extractToken(req);
+    if (!token) {
+      return { authenticated: false };
+    }
+
+    const result = this.ssoAuthenticator.verifySessionToken(token);
+    return {
+      authenticated: result.valid,
+      user: result.user,
+    };
+  }
+
+  private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
     const pathname = url.pathname;
     const method = req.method || "GET";
@@ -99,7 +163,7 @@ export class DashboardServer {
     // Set CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
     if (method === "OPTIONS") {
       res.writeHead(204);
@@ -111,6 +175,123 @@ export class DashboardServer {
     if (pathname === "/healthz") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", timestamp: new Date().toISOString() }));
+      return;
+    }
+
+    // SSO: Initiate Login
+    if (pathname === "/auth/login") {
+      if (!this.ssoAuthenticator || !this.ssoAuthenticator.isEnabled()) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ssoEnabled: false, message: "SSO is not enabled on this server." }));
+        return;
+      }
+
+      const providerParam = url.searchParams.get("provider");
+      const authUrl = this.ssoAuthenticator.generateAuthUrl();
+
+      if (url.searchParams.get("format") === "json") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ authUrl, provider: this.ssoAuthenticator.getProvider() }));
+        return;
+      }
+
+      res.writeHead(302, { Location: authUrl });
+      res.end();
+      return;
+    }
+
+    // SSO: Callback
+    if (pathname === "/auth/callback") {
+      if (!this.ssoAuthenticator || !this.ssoAuthenticator.isEnabled()) {
+        res.writeHead(302, { Location: "/" });
+        res.end();
+        return;
+      }
+
+      const code = url.searchParams.get("code") || undefined;
+      const idToken = url.searchParams.get("id_token") || undefined;
+      const samlResponse = url.searchParams.get("SAMLResponse") || undefined;
+
+      const callbackResult = await this.ssoAuthenticator.handleCallback({
+        code,
+        id_token: idToken,
+        samlResponse,
+      });
+
+      if (!callbackResult.success || !callbackResult.sessionToken) {
+        res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(`<h1>SSO Authentication Failed</h1><p>${callbackResult.error || "Unknown error"}</p><a href="/auth/login">Try again</a>`);
+        return;
+      }
+
+      res.writeHead(302, {
+        "Set-Cookie": `dbshield_session=${callbackResult.sessionToken}; Path=/; HttpOnly; SameSite=Lax`,
+        Location: "/",
+      });
+      res.end();
+      return;
+    }
+
+    // SSO: Current User
+    if (pathname === "/auth/user") {
+      const auth = this.authenticateUser(req);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ authenticated: auth.authenticated, user: auth.user }));
+      return;
+    }
+
+    // SSO: Logout
+    if (pathname === "/auth/logout") {
+      res.writeHead(302, {
+        "Set-Cookie": "dbshield_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        Location: "/",
+      });
+      res.end();
+      return;
+    }
+
+    // Compliance Reporting Endpoint (SOC 2 / ISO 27001)
+    if (pathname === "/api/compliance/report") {
+      const auth = this.authenticateUser(req);
+      if (!auth.authenticated) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Unauthorized: SSO authentication required", loginUrl: "/auth/login" }));
+        return;
+      }
+
+      const framework = (url.searchParams.get("framework") as "soc2" | "iso27001") || "soc2";
+      const format = (url.searchParams.get("format") as "json" | "html" | "pdf") || "json";
+
+      const report = await this.complianceReporter.generateReport({
+        framework,
+        format,
+        companyName: url.searchParams.get("company") || undefined,
+        environment: url.searchParams.get("env") || undefined,
+      });
+
+      if (format === "html") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(report.rawReport);
+      } else if (format === "pdf") {
+        res.writeHead(200, {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${report.reportId}.pdf"`,
+        });
+        res.end(report.rawReport);
+      } else {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(report));
+      }
+      return;
+    }
+
+    // Authenticate Protected API Endpoints
+    const auth = this.authenticateUser(req);
+    const isProtectedApi = pathname.startsWith("/api/approvals") || pathname === "/api/audit" || pathname === "/api/stream";
+
+    if (isProtectedApi && !auth.authenticated) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Unauthorized: SSO authentication required", loginUrl: "/auth/login" }));
       return;
     }
 
@@ -142,9 +323,9 @@ export class DashboardServer {
     const approveMatch = pathname.match(/^\/api\/approvals\/([^/]+)\/approve$/);
     if (approveMatch && method === "POST") {
       const id = approveMatch[1];
-      const success = this.approvalQueue.approve(id);
+      const success = this.approvalQueue.approve(id, auth.user?.email || "developer");
       res.writeHead(success ? 200 : 404, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success, id, status: "APPROVED" }));
+      res.end(JSON.stringify({ success, id, status: "APPROVED", approvedBy: auth.user?.email }));
       return;
     }
 
@@ -164,9 +345,9 @@ export class DashboardServer {
         } catch {
           // ignore parse error
         }
-        const success = this.approvalQueue.reject(id, undefined, reason);
+        const success = this.approvalQueue.reject(id, auth.user?.email || "developer", reason);
         res.writeHead(success ? 200 : 404, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success, id, status: "REJECTED" }));
+        res.end(JSON.stringify({ success, id, status: "REJECTED", rejectedBy: auth.user?.email }));
       });
       return;
     }
@@ -179,10 +360,16 @@ export class DashboardServer {
       return;
     }
 
-    // Serve HTML Dashboard UI
+    // Serve HTML Dashboard UI or SSO Portal
     if (pathname === "/" || pathname === "/dashboard") {
+      if (this.ssoAuthenticator?.isEnabled() && !auth.authenticated) {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(this.renderSsoLoginHtml());
+        return;
+      }
+
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(this.renderDashboardHtml());
+      res.end(this.renderDashboardHtml(auth.user));
       return;
     }
 
@@ -190,9 +377,146 @@ export class DashboardServer {
     res.end(JSON.stringify({ error: "Not Found" }));
   }
 
-  private renderDashboardHtml(): string {
+  private renderSsoLoginHtml(): string {
+    const provider = this.ssoAuthenticator?.getProvider() || "okta";
+    const providerNames: Record<string, string> = {
+      okta: "Okta Verify / Workforce",
+      "azure-ad": "Microsoft Azure AD (Entra ID)",
+      google: "Google Workspace",
+      "ping-identity": "PingIdentity PingFederate",
+      saml: "Enterprise SAML 2.0",
+      oidc: "Enterprise OIDC",
+    };
+    const activeProviderName = providerNames[provider] || provider.toUpperCase();
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DBShield — Enterprise SSO Sign-In</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --border: #1f293d;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent: #8b5cf6;
+      --accent-hover: #7c3aed;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .login-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 440px;
+      padding: 36px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    .logo {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .sso-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 13px 20px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      color: white;
+      background: var(--accent);
+      transition: background 0.15s ease;
+      cursor: pointer;
+      border: none;
+    }
+    .sso-btn:hover { background: var(--accent-hover); }
+    .providers-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .provider-pill {
+      background: #1f2937;
+      border: 1px solid #374151;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo">🛡️</div>
+    <h1>DBShield Control Plane</h1>
+    <p>Sign in with your corporate identity to access live mutation approvals and security guardrails.</p>
+
+    <a href="/auth/login" class="sso-btn">
+      <span>Continue with ${activeProviderName}</span>
+    </a>
+
+    <div class="providers-grid">
+      <div class="provider-pill">🔵 Okta</div>
+      <div class="provider-pill">🔷 Azure AD</div>
+      <div class="provider-pill">🔴 Google Workspace</div>
+      <div class="provider-pill">🟢 PingIdentity</div>
+    </div>
+
+    <div class="footer">
+      Protected by Enterprise SSO (OIDC / SAML 2.0) & SOC 2 CC6.1
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  private renderDashboardHtml(user?: SsoUser): string {
     const tier = this.config.safetyTier || "BALANCED";
     const dialect = this.config.dialect || "sqlite";
+    const userBadge = user?.email
+      ? `<span style="font-size: 13px; color: var(--text-muted); background: var(--card-border); padding: 4px 10px; border-radius: 6px;">👤 ${user.email} (${user.roles.join(", ")}) &middot; <a href="/auth/logout" style="color: var(--accent); text-decoration: none;">Sign Out</a></span>`
+      : "";
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -397,6 +721,7 @@ export class DashboardServer {
       </div>
     </div>
     <div class="meta-badges">
+      ${userBadge}
       <span class="badge badge-status">● LIVE GATEWAY</span>
       <span class="badge badge-tier">TIER: ${tier}</span>
       <span class="badge badge-dialect">DIALECT: ${dialect.toUpperCase()}</span>

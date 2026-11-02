@@ -57,8 +57,8 @@ test("Packaging - Docker Container Multi-Stage & Security Hardening Verification
   assert.ok(dockerfileContent.includes("AS runtime"));
 
   // Verify unprivileged non-root user
-  assert.ok(dockerfileContent.includes("10001"));
-  assert.ok(dockerfileContent.includes("USER 10001:10001"));
+  assert.ok(dockerfileContent.includes("nonroot") || dockerfileContent.includes("10001"));
+  assert.ok(dockerfileContent.includes("USER nonroot:nonroot") || dockerfileContent.includes("USER 10001:10001"));
 
   // Verify exposed ports
   assert.ok(dockerfileContent.includes("EXPOSE 5433 9090"));

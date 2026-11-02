@@ -79,7 +79,7 @@ export class SiemTelemetryStreamer {
     }
   }
 
-  public async flush(): Promise<{ success: boolean; sentCount: number; error?: string }> {
+  public async flush(): Promise<{ success: boolean; sentCount: number; error?: string; airGapped?: boolean }> {
     if (
       !this.config.enabled ||
       !this.config.endpoint ||
@@ -87,6 +87,18 @@ export class SiemTelemetryStreamer {
       this.isFlushing
     ) {
       return { success: true, sentCount: 0 };
+    }
+
+    // In Air-Gapped / Private VPC mode, suppress all outbound HTTP network telemetry
+    if (
+      process.env.DBSHIELD_AIR_GAPPED === "1" ||
+      process.env.DBSHIELD_AIR_GAPPED === "true" ||
+      process.env.RITUAL_AIR_GAPPED === "1" ||
+      process.env.RITUAL_AIR_GAPPED === "true"
+    ) {
+      const airGappedCount = this.queue.length;
+      this.queue.length = 0; // Drain queue locally without emitting network sockets
+      return { success: true, sentCount: 0, airGapped: true };
     }
 
     this.isFlushing = true;

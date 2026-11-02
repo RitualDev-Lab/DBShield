@@ -328,6 +328,96 @@ export interface DBShieldConfig {
   dashboardPort?: number; // Port for live query approval web dashboard (default 3100)
   dashboardHost?: string; // Host for dashboard (default "0.0.0.0")
   requireApprovalForMutations?: boolean; // Block sensitive mutations until approved via dashboard
+  airGapped?: boolean; // 100% offline mode: zero outbound network phone-homes, strictly local telemetry & models
+  sso?: SsoConfig; // SSO/OIDC/SAML authentication configuration
+  compliance?: {
+    companyName?: string;
+    environment?: "production" | "staging" | "sandbox";
+  };
+}
+
+export type SsoProvider =
+  | "okta"
+  | "azure-ad"
+  | "ping-identity"
+  | "google"
+  | "oidc"
+  | "saml";
+
+export interface SsoUser {
+  id: string;
+  email: string;
+  name?: string;
+  roles: string[];
+  provider: SsoProvider;
+  tenantId?: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
+export interface SsoConfig {
+  enabled: boolean;
+  provider: SsoProvider;
+  issuer?: string; // OIDC Issuer e.g. "https://login.microsoftonline.com/{tenant}/v2.0"
+  clientId?: string;
+  clientSecret?: string;
+  redirectUri?: string;
+  allowedDomains?: string[]; // Allowed email domains e.g. ["ritual.dev", "enterprise.com"]
+  allowedRoles?: string[]; // RBAC roles allowed to access dashboard/approvals
+  samlEntrypoint?: string;
+  samlCert?: string;
+  jwtSecret?: string; // Secret for signing local session JWTs / cookies
+  enforceMfa?: boolean;
+}
+
+export interface ComplianceProof {
+  controlId: string;
+  controlTitle: string;
+  status: "COMPLIANT" | "PARTIAL" | "NON_COMPLIANT";
+  description: string;
+  cryptographicProof?: {
+    merkleRoot?: string;
+    entryCount: number;
+    hashChainVerified: boolean;
+    chainHeadHash: string;
+    chainTailHash: string;
+  };
+  piiMaskingProof?: {
+    totalEvaluatedRows: number;
+    redactedFieldCount: number;
+    zeroLeakageVerified: boolean;
+    activeRuleCount: number;
+  };
+  dryRunAuditProof?: {
+    simulatedMutations: number;
+    blockedHighRiskQueries: number;
+    rollbackIntegrityVerified: boolean;
+    approvedMutations: number;
+  };
+}
+
+export interface ComplianceReportOptions {
+  framework: "soc2" | "iso27001" | "hipaa";
+  format?: "pdf" | "html" | "json";
+  outputPath?: string;
+  startDate?: string;
+  endDate?: string;
+  includeProofs?: boolean;
+  companyName?: string;
+  environment?: string;
+}
+
+export interface ComplianceReportResult {
+  framework: "soc2" | "iso27001" | "hipaa";
+  generatedAt: string;
+  reportId: string;
+  auditorSignature: string; // HMAC SHA-256 seal of the report payload
+  status: "PASS" | "NEEDS_REVIEW" | "FAIL";
+  score: number; // percentage compliant e.g. 100
+  summary: string;
+  proofs: ComplianceProof[];
+  outputPath?: string;
+  rawReport?: string;
 }
 
 export interface DatabaseAdapter {

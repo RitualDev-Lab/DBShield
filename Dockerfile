@@ -28,6 +28,9 @@ COPY --from=builder /build/node_modules ./node_modules
 
 EXPOSE 5433 9090 3100
 
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:9090/healthz').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+
 ENV NODE_ENV=production
 ENV DBSHIELD_STORAGE_PATH=/tmp/dbshield.sqlite
 

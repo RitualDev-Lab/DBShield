@@ -15,3 +15,5 @@ export * from "./server/index.js";
 export * from "./metrics/index.js";
 export * from "./approval/index.js";
 export * from "./dashboard/index.js";
+export * from "./auth/index.js";
+export * from "./compliance/index.js";

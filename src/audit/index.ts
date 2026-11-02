@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { PiiRedactor } from "../pii/redactor.js";
@@ -25,6 +26,8 @@ export interface AuditLogEntry {
   executionTimeMs?: number;
   violations?: string[];
   piiRedacted?: boolean;
+  previousHash?: string;
+  entryHash?: string;
 }
 
 export class AuditLogger {
@@ -33,6 +36,7 @@ export class AuditLogger {
   private readonly logFilePath?: string;
   private readonly redactor: PiiRedactor;
   private siemStreamer?: SiemTelemetryStreamer;
+  private lastHash = "0000000000000000000000000000000000000000000000000000000000000000";
 
   constructor(
     logFilePath?: string,
@@ -54,12 +58,26 @@ export class AuditLogger {
     return this.siemStreamer;
   }
 
+  public getChainHeadHash(): string {
+    return this.lastHash;
+  }
+
   public async log(entry: AuditLogEntry): Promise<void> {
+    const previousHash = this.lastHash;
+    const sanitizedSql = this.redactor.redactSql(entry.sql);
+    const sanitizedViolations = entry.violations?.map((v) => this.redactor.redactErrorMessage(v));
+
+    const hashPayload = `${previousHash}|${entry.auditId}|${entry.timestamp}|${sanitizedSql}|${entry.status}|${entry.riskScore}`;
+    const entryHash = crypto.createHash("sha256").update(hashPayload).digest("hex");
+    this.lastHash = entryHash;
+
     const sanitizedEntry: AuditLogEntry = {
       ...entry,
-      sql: this.redactor.redactSql(entry.sql),
-      violations: entry.violations?.map((v) => this.redactor.redactErrorMessage(v)),
+      sql: sanitizedSql,
+      violations: sanitizedViolations,
       piiRedacted: true,
+      previousHash,
+      entryHash,
     };
 
     this.buffer.unshift(sanitizedEntry);
@@ -85,6 +103,66 @@ export class AuditLogger {
         // Non-fatal if SIEM enqueue fails
       }
     }
+  }
+
+  /**
+   * Verifies the cryptographic tamper-evident hash chain across all stored log entries.
+   * Returns verification status, entry count, and chain boundaries.
+   */
+  public verifyCryptographicChain(): {
+    valid: boolean;
+    totalVerified: number;
+    headHash: string;
+    tailHash: string;
+    brokenAtIndex?: number;
+  } {
+    if (this.buffer.length === 0) {
+      return {
+        valid: true,
+        totalVerified: 0,
+        headHash: this.lastHash,
+        tailHash: this.lastHash,
+      };
+    }
+
+    // Buffer is stored in reverse chronological order (newest first)
+    const chronological = [...this.buffer].reverse();
+    let currentExpectedPrev = "0000000000000000000000000000000000000000000000000000000000000000";
+
+    for (let i = 0; i < chronological.length; i++) {
+      const entry = chronological[i];
+      if (entry.previousHash !== currentExpectedPrev) {
+        return {
+          valid: false,
+          totalVerified: i,
+          headHash: chronological[chronological.length - 1].entryHash || "",
+          tailHash: chronological[0].previousHash || "",
+          brokenAtIndex: i,
+        };
+      }
+
+      const hashPayload = `${entry.previousHash}|${entry.auditId}|${entry.timestamp}|${entry.sql}|${entry.status}|${entry.riskScore}`;
+      const recomputedHash = crypto.createHash("sha256").update(hashPayload).digest("hex");
+
+      if (entry.entryHash !== recomputedHash) {
+        return {
+          valid: false,
+          totalVerified: i,
+          headHash: chronological[chronological.length - 1].entryHash || "",
+          tailHash: chronological[0].previousHash || "",
+          brokenAtIndex: i,
+        };
+      }
+
+      currentExpectedPrev = entry.entryHash;
+    }
+
+    return {
+      valid: true,
+      totalVerified: chronological.length,
+      headHash: chronological[chronological.length - 1].entryHash || "",
+      tailHash: chronological[0].previousHash || "",
+    };
   }
 
   public getEntries(

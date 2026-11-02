@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
+import { ComplianceReporter } from "./compliance/reporter.js";
 import { loadConfig } from "./config/index.js";
 import { installClaude, installCursor } from "./configurator/index.js";
 import { DashboardServer } from "./dashboard/index.js";
@@ -21,6 +22,7 @@ const HELP_TEXT = `
     start            Launch the MCP server on stdio transport (default)
     proxy            Launch PostgreSQL wire-protocol proxy on TCP port (default: 5433)
     dashboard        Launch real-time live query approval feed & web dashboard (default: 3100)
+    report           Generate verifiable SOC 2 / ISO 27001 compliance audit report & PDF
     status           Inspect database connection and active security parameters
     init             Generate a default dbshield.config.json in the current directory
     install-claude   Automatically configure Claude Desktop to use DBShield
@@ -28,6 +30,11 @@ const HELP_TEXT = `
     help             Display this help message
 
   OPTIONS:
+    --compliance <soc2|iso27001>        Target compliance framework (default: soc2)
+    --audit-pdf <path>                  Generate and save audit PDF report to file path
+    --format <pdf|html|json>            Report output format (default: html, or pdf if --audit-pdf)
+    --output, -o <path>                 Path to save generated compliance report
+    --air-gapped                        Run 100% offline with zero outbound phone-homes
     --dialect <sqlite|postgres|mysql>   Specify database dialect (default: sqlite)
     --storage <path>                    SQLite database file path (default: ./dbshield.sqlite)
     --tier <STRICT|BALANCED|PERMISSIVE> Security enforcement level (default: BALANCED)
@@ -66,6 +73,11 @@ async function main() {
   const args = process.argv.slice(2);
   const command = args[0] || "start";
 
+  if (args.includes("--air-gapped")) {
+    process.env.DBSHIELD_AIR_GAPPED = "1";
+    process.env.RITUAL_AIR_GAPPED = "1";
+  }
+
   if (args.includes("--help") || args.includes("-h") || command === "help") {
     console.log(HELP_TEXT);
     process.exit(0);
@@ -77,6 +89,59 @@ async function main() {
   }
 
   switch (command) {
+    case "report": {
+      const config = await loadConfig();
+      const compIdx = args.indexOf("--compliance");
+      const framework =
+        compIdx !== -1 && args[compIdx + 1]
+          ? (args[compIdx + 1].toLowerCase() as "soc2" | "iso27001")
+          : "soc2";
+
+      const pdfIdx = args.indexOf("--audit-pdf");
+      const outputIdx = args.indexOf("-o") !== -1 ? args.indexOf("-o") : args.indexOf("--output");
+      let outputPath: string | undefined;
+      let format: "pdf" | "html" | "json" = "html";
+
+      if (pdfIdx !== -1 && args[pdfIdx + 1]) {
+        outputPath = args[pdfIdx + 1];
+        format = "pdf";
+      } else if (outputIdx !== -1 && args[outputIdx + 1]) {
+        outputPath = args[outputIdx + 1];
+        if (outputPath.endsWith(".pdf")) format = "pdf";
+        else if (outputPath.endsWith(".json")) format = "json";
+        else format = "html";
+      } else {
+        outputPath = `./dbshield-${framework}-report.html`;
+      }
+
+      const formatIdx = args.indexOf("--format");
+      if (formatIdx !== -1 && args[formatIdx + 1]) {
+        format = args[formatIdx + 1].toLowerCase() as "pdf" | "html" | "json";
+      }
+
+      const reporter = new ComplianceReporter(config);
+      const result = await reporter.generateReport({
+        framework,
+        format,
+        outputPath,
+      });
+
+      console.log(`
+🛡️  DBShield Compliance Audit Reporter
+─────────────────────────────────────
+Framework:        ${framework.toUpperCase()}
+Report ID:        ${result.reportId}
+Generated At:     ${result.generatedAt}
+Compliance Score: ${result.score}% (${result.status})
+Summary:          ${result.summary}
+Auditor HMAC Seal:${result.auditorSignature}
+Report Saved To:  ${result.outputPath || outputPath}
+─────────────────────────────────────
+Run 'open ${result.outputPath || outputPath}' or print to PDF for compliance officers.
+`);
+      break;
+    }
+
     case "start": {
       const serverInstance = await createMcpServer();
       await serverInstance.start();
