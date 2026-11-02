@@ -1,5 +1,6 @@
 import http from "node:http";
 import { type AddressInfo } from "node:net";
+import { ChatOpsNotifier } from "../approval/chatops.js";
 import { ApprovalQueue } from "../approval/queue.js";
 import { type AuditLogEntry, AuditLogger } from "../audit/index.js";
 import { SsoAuthenticator } from "../auth/sso.js";
@@ -13,6 +14,7 @@ export class DashboardServer {
   private readonly auditLogger?: AuditLogger;
   private readonly ssoAuthenticator?: SsoAuthenticator;
   private readonly complianceReporter: ComplianceReporter;
+  private readonly chatOpsNotifier: ChatOpsNotifier;
   private sseClients: Set<http.ServerResponse> = new Set();
   private listenPort = 3100;
 
@@ -28,6 +30,7 @@ export class DashboardServer {
     this.ssoAuthenticator =
       ssoAuthenticator || (config.sso ? new SsoAuthenticator(config.sso) : undefined);
     this.complianceReporter = new ComplianceReporter(config, auditLogger);
+    this.chatOpsNotifier = new ChatOpsNotifier(config.chatOps || {}, this.approvalQueue);
     this.listenPort = config.dashboardPort || 3100;
 
     // Broadcast new approval requests to all connected SSE clients
@@ -38,6 +41,10 @@ export class DashboardServer {
 
   public getApprovalQueue(): ApprovalQueue {
     return this.approvalQueue;
+  }
+
+  public getChatOpsNotifier(): ChatOpsNotifier {
+    return this.chatOpsNotifier;
   }
 
   public getSsoAuthenticator(): SsoAuthenticator | undefined {
@@ -282,6 +289,91 @@ export class DashboardServer {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(report));
       }
+      return;
+    }
+
+    // Slack Interactive Webhook Callback
+    if (
+      (pathname === "/api/webhooks/slack/actions" || pathname === "/slack/actions") &&
+      method === "POST"
+    ) {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        const signature = (req.headers["x-slack-signature"] as string) || "";
+        const timestamp = (req.headers["x-slack-request-timestamp"] as string) || "";
+
+        if (!this.chatOpsNotifier.verifySlackSignature(body, signature, timestamp)) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid Slack signature" }));
+          return;
+        }
+
+        try {
+          let parsed: any;
+          if (body.startsWith("payload=")) {
+            const decoded = decodeURIComponent(body.slice(8).replace(/\+/g, " "));
+            parsed = JSON.parse(decoded);
+          } else {
+            parsed = JSON.parse(body);
+          }
+
+          const action = parsed.actions?.[0];
+          const actionId = action?.action_id;
+          const requestId = action?.value;
+          const userName = parsed.user?.username || parsed.user?.name || "Slack User";
+          const userEmail = parsed.user?.email;
+
+          const result = this.chatOpsNotifier.handleSlackAction({
+            actionId,
+            requestId,
+            userName,
+            userEmail,
+          });
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              replace_original: true,
+              text: `[DBShield] Mutation ${result.status} by @${userName}`,
+              blocks: result.updatedBlocks,
+            }),
+          );
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid Slack payload: " + String(err) }));
+        }
+      });
+      return;
+    }
+
+    // Teams Interactive Webhook Callback
+    if (
+      (pathname === "/api/webhooks/teams/actions" || pathname === "/teams/actions") &&
+      method === "POST"
+    ) {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body);
+          const actionId = parsed.action || parsed.verb;
+          const requestId = parsed.requestId || parsed.id;
+          const userName = parsed.from?.name || "Teams User";
+
+          const result = this.chatOpsNotifier.handleSlackAction({
+            actionId: actionId === "approve" ? "dbshield_approve" : "dbshield_reject",
+            requestId,
+            userName,
+          });
+
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: result.success, status: result.status }));
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid Teams payload: " + String(err) }));
+        }
+      });
       return;
     }
 

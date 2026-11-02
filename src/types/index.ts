@@ -330,10 +330,23 @@ export interface DBShieldConfig {
   requireApprovalForMutations?: boolean; // Block sensitive mutations until approved via dashboard
   airGapped?: boolean; // 100% offline mode: zero outbound network phone-homes, strictly local telemetry & models
   sso?: SsoConfig; // SSO/OIDC/SAML authentication configuration
+  chatOps?: ChatOpsConfig; // Slack & Microsoft Teams interactive mutation approval integration
   compliance?: {
     companyName?: string;
     environment?: "production" | "staging" | "sandbox";
   };
+}
+
+export interface ChatOpsConfig {
+  enabled?: boolean;
+  slackWebhookUrl?: string;
+  slackBotToken?: string;
+  slackChannel?: string; // Channel name or ID e.g. "#db-approvals"
+  slackSigningSecret?: string; // For verifying X-Slack-Signature
+  teamsWebhookUrl?: string; // Microsoft Teams connector webhook URL
+  callbackBaseUrl?: string; // Public or internal URL where Slack sends interaction payloads
+  notifyOnPending?: boolean; // default true
+  notifyOnDecision?: boolean; // default true
 }
 
 export type SsoProvider =
