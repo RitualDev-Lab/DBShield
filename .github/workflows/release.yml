@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -41,8 +42,13 @@ jobs:
       - name: Build TypeScript
         run: pnpm run build
 
-      - name: Publish to npm
-        run: pnpm publish --no-git-checks --access public
+      - name: Generate SLSA Build Provenance Attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'dist/**'
+
+      - name: Publish to npm with Provenance
+        run: pnpm publish --no-git-checks --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
