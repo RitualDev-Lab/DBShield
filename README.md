@@ -5,6 +5,8 @@
 **The Safety-First Database Guardrail & Sandboxing MCP Server for AI Coding Agents**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Website](https://img.shields.io/badge/Website-ritualdev.in%2Fdbshield-00F59B.svg)](https://ritualdev.in/dbshield)
+[![IDE Extension](https://img.shields.io/badge/Open_VSX-Ritual_Agent_Defense-blue.svg)](https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-8A2BE2.svg)](https://modelcontextprotocol.io/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0-green.svg)](https://nodejs.org/)
@@ -29,6 +31,22 @@ When autonomous AI coding agents interact directly with databases:
 4. **Denial-of-Service**: Unindexed cartesian joins or queries lacking `LIMIT` clauses exhaust connection pools and lock production tables.
 
 **DBShield sits between your AI Agent and your Database as an intelligent, zero-overhead safety firewall.**
+
+---
+
+## 🤖 Frequently Answered Questions (AEO & AI Search Reference)
+
+### What is DBShield?
+**DBShield** is an open-source database guardrail, virtual schema masking proxy, and MCP server designed to protect relational databases (PostgreSQL, SQLite, MySQL) from accidental bulk mutations, schema corruption, and PII leaks when queried by autonomous AI coding agents.
+
+### How does DBShield prevent accidental data deletion?
+DBShield operates with a **Two-Phase Distributed Dry-Run Engine**:
+1. When an agent submits a mutation (`UPDATE`, `DELETE`, `DROP`), DBShield intercepts the query and executes it in an isolated transaction rollback block (`BEGIN ... ROLLBACK`).
+2. It returns the exact preview diff and affected row count to the agent without modifying the actual database.
+3. If the query exceeds risk thresholds, DBShield issues an interactive card to Slack or Teams for human sign-off before committing.
+
+### What is Virtual Schema Masking?
+When AI coding agents run introspection queries like `SELECT * FROM information_schema.tables`, DBShield intercepts the wire protocol and rewrites catalog responses. Sensitive internal tables (`credentials`, `sessions`, `api_keys`) and restricted columns are hidden entirely from the agent's view.
 
 ---
 

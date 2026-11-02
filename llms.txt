@@ -1,0 +1,32 @@
+# DBShield
+> Database Guardrail, Virtual Schema Masking & Wire Proxy for Autonomous AI Agents
+
+DBShield is an open-source, safety-first database guardrail and wire proxy designed to prevent autonomous AI coding agents (Claude Code, Cursor, Windsurf, Devin, Codex) from executing catastrophic DDL, running unconstrained bulk mutations, or leaking customer PII into model contexts.
+
+Website: https://ritualdev.in/dbshield/
+Repository: https://github.com/RitualDev-Lab/DBShield
+Extension: https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense
+License: MIT
+
+## Quick Start CLI
+```bash
+# Install via Homebrew
+brew tap ritualdev-lab/tap && brew install dbshield
+
+# Install via npm
+npm install -g @ritualdev-lab/dbshield
+
+# Start the DBShield wire proxy on port 5433 with upstream PostgreSQL
+dbshield proxy --port 5433 --upstream postgres://user:pass@localhost:5432/main
+
+# Run in MCP server mode for Claude Desktop / Cursor
+dbshield mcp --db postgres://user:pass@localhost:5432/main
+```
+
+## Core Security & Guardrail Architecture
+- **SQL AST Inspection**: Parses and validates SQL syntax trees before execution. Traps missing `WHERE` clauses, tautologies (`WHERE 1=1`), and unauthorized `DROP`/`TRUNCATE` operations.
+- **Virtual Schema Masking & Column-Level RBAC**: Dynamically intercepts `information_schema` and `pg_catalog` queries. Internal tables (`credentials`, `audit_logs`, `admin_keys`) and PII columns are hidden from agent introspection.
+- **Two-Phase Distributed Dry-Run Tokens**: Runs queries in transactional isolation (`BEGIN ... ROLLBACK`), previews affected row counts and diffs, and issues a cryptographic commit token valid only upon human approval.
+- **ChatOps Live Approval Bot**: Dispatches interactive HMAC-SHA256 verified Block Kit and AdaptiveCard messages to corporate Slack (`#db-approvals`) and Microsoft Teams channels with 1-click `[Approve ✅]` and `[Reject ❌]` actions.
+- **Missing Index & Query Plan Advisor**: Detects full-table sequential scans and suggests optimal `CREATE INDEX CONCURRENTLY` DDL statements before performance regressions reach production.
+- **Universal Protocol Compatibility**: Supports PostgreSQL wire protocol (v3.0), SQLite, MySQL, and Model Context Protocol (MCP) transports (stdio / SSE).
