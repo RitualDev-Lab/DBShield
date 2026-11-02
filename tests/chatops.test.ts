@@ -102,12 +102,13 @@ test("ChatOpsNotifier - Verifies Slack Request HMAC-SHA256 Signatures", () => {
   const timestamp = Math.floor(Date.now() / 1000).toString();
   const rawBody = "payload=%7B%22type%22%3A%22block_actions%22%7D";
   const sigBasestring = `v0:${timestamp}:${rawBody}`;
-  const validSignature =
-    "v0=" +
-    crypto.createHmac("sha256", signingSecret).update(sigBasestring).digest("hex");
+  const validSignature = `v0=${crypto.createHmac("sha256", signingSecret).update(sigBasestring).digest("hex")}`;
 
   assert.strictEqual(notifier.verifySlackSignature(rawBody, validSignature, timestamp), true);
-  assert.strictEqual(notifier.verifySlackSignature(rawBody, "v0=invalid-signature", timestamp), false);
+  assert.strictEqual(
+    notifier.verifySlackSignature(rawBody, "v0=invalid-signature", timestamp),
+    false,
+  );
 });
 
 test("ChatOpsNotifier - Handles Slack [Approve] & [Reject] Actions and Resolves Queue", () => {

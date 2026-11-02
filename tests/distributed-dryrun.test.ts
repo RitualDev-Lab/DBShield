@@ -2,8 +2,8 @@ import assert from "node:assert";
 import test from "node:test";
 import { InMemoryRedisAdapter } from "../src/adapters/redis.js";
 import { SqliteAdapter } from "../src/adapters/sqlite.js";
-import { DistributedSandboxEngine } from "../src/sandbox/distributed.js";
 import { DistributedCommitTokenManager } from "../src/sandbox/distributed-tokens.js";
+import { DistributedSandboxEngine } from "../src/sandbox/distributed.js";
 import type { DBShieldConfig, DistributedStoreOperation } from "../src/types/index.js";
 
 test("InMemoryRedisAdapter - Shadow simulation dry-run and atomic rollback", async () => {

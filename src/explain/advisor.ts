@@ -31,14 +31,14 @@ export class QueryPlanAdvisor {
 
           // Traverse WHERE clause
           if (ast.where) {
-            this.traverseAstForColumns(ast.where, cleanTbl, columns);
+            QueryPlanAdvisor.traverseAstForColumns(ast.where, cleanTbl, columns);
           }
 
           // Traverse JOIN ON clauses
           if (Array.isArray(ast.from)) {
             for (const f of ast.from) {
               if (f.on) {
-                this.traverseAstForColumns(f.on, cleanTbl, columns);
+                QueryPlanAdvisor.traverseAstForColumns(f.on, cleanTbl, columns);
               }
             }
           }
@@ -111,9 +111,9 @@ export class QueryPlanAdvisor {
       }
     }
 
-    if (n.left) this.traverseAstForColumns(n.left, targetTable, columns);
-    if (n.right) this.traverseAstForColumns(n.right, targetTable, columns);
-    if (n.expr) this.traverseAstForColumns(n.expr, targetTable, columns);
+    if (n.left) QueryPlanAdvisor.traverseAstForColumns(n.left, targetTable, columns);
+    if (n.right) QueryPlanAdvisor.traverseAstForColumns(n.right, targetTable, columns);
+    if (n.expr) QueryPlanAdvisor.traverseAstForColumns(n.expr, targetTable, columns);
   }
 
   /**
@@ -177,11 +177,11 @@ export class QueryPlanAdvisor {
     }
 
     for (const tableName of seqScanTables) {
-      const predicateCols = this.extractPredicateColumns(sql, tableName, dialect);
+      const predicateCols = QueryPlanAdvisor.extractPredicateColumns(sql, tableName, dialect);
 
       // If no explicit predicate columns identified, fall back to "id" or primary lookup
       const targetCols = predicateCols.length > 0 ? predicateCols : ["id"];
-      const { indexName, ddl } = this.generateIndexDdl(tableName, targetCols, dialect);
+      const { indexName, ddl } = QueryPlanAdvisor.generateIndexDdl(tableName, targetCols, dialect);
 
       // Determine regressive severity
       const estimatedCost = report.estimatedCost;

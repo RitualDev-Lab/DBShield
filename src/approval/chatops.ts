@@ -24,7 +24,8 @@ export class ChatOpsNotifier {
 
   public isEnabled(): boolean {
     return Boolean(
-      this.config.enabled && (this.config.slackWebhookUrl || this.config.slackBotToken || this.config.teamsWebhookUrl),
+      this.config.enabled &&
+        (this.config.slackWebhookUrl || this.config.slackBotToken || this.config.teamsWebhookUrl),
     );
   }
 
@@ -35,18 +36,12 @@ export class ChatOpsNotifier {
     if (!this.isEnabled()) return;
 
     if (request.status === "PENDING" && this.config.notifyOnPending) {
-      await Promise.allSettled([
-        this.notifySlack(request),
-        this.notifyTeams(request),
-      ]);
+      await Promise.allSettled([this.notifySlack(request), this.notifyTeams(request)]);
     } else if (
       (request.status === "APPROVED" || request.status === "REJECTED") &&
       this.config.notifyOnDecision
     ) {
-      await Promise.allSettled([
-        this.notifySlack(request),
-        this.notifyTeams(request),
-      ]);
+      await Promise.allSettled([this.notifySlack(request), this.notifyTeams(request)]);
     }
   }
 
@@ -59,7 +54,11 @@ export class ChatOpsNotifier {
   } {
     const isPending = req.status === "PENDING";
     const statusEmoji =
-      req.status === "APPROVED" ? "✅ APPROVED" : req.status === "REJECTED" ? "❌ REJECTED" : "🟡 PENDING REVIEW";
+      req.status === "APPROVED"
+        ? "✅ APPROVED"
+        : req.status === "REJECTED"
+          ? "❌ REJECTED"
+          : "🟡 PENDING REVIEW";
     const riskEmoji =
       req.riskLevel === "CRITICAL"
         ? "🚨 CRITICAL"
@@ -234,17 +233,15 @@ export class ChatOpsNotifier {
 
     const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 60 * 5;
     const reqTimestamp = Number.parseInt(timestamp, 10);
-    if (isNaN(reqTimestamp) || reqTimestamp < fiveMinutesAgo) {
+    if (Number.isNaN(reqTimestamp) || reqTimestamp < fiveMinutesAgo) {
       return false; // Replay attack prevention
     }
 
     const sigBasestring = `v0:${timestamp}:${rawBody}`;
-    const mySignature =
-      "v0=" +
-      crypto
-        .createHmac("sha256", this.config.slackSigningSecret)
-        .update(sigBasestring)
-        .digest("hex");
+    const mySignature = `v0=${crypto
+      .createHmac("sha256", this.config.slackSigningSecret)
+      .update(sigBasestring)
+      .digest("hex")}`;
 
     const bufA = Buffer.from(mySignature, "utf8");
     const bufB = Buffer.from(signature, "utf8");

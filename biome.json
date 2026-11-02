@@ -20,6 +20,13 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noAssignInExpressions": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off"
+      },
       "style": {
         "noNonNullAssertion": "off"
       }

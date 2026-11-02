@@ -349,13 +349,7 @@ export interface ChatOpsConfig {
   notifyOnDecision?: boolean; // default true
 }
 
-export type SsoProvider =
-  | "okta"
-  | "azure-ad"
-  | "ping-identity"
-  | "google"
-  | "oidc"
-  | "saml";
+export type SsoProvider = "okta" | "azure-ad" | "ping-identity" | "google" | "oidc" | "saml";
 
 export interface SsoUser {
   id: string;

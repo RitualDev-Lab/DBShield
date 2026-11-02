@@ -5,7 +5,12 @@ export interface SsoValidationResult {
   valid: boolean;
   user?: SsoUser;
   error?: string;
-  errorCode?: "EXPIRED" | "DOMAIN_NOT_ALLOWED" | "INSUFFICIENT_ROLE" | "INVALID_SIGNATURE" | "MALFORMED";
+  errorCode?:
+    | "EXPIRED"
+    | "DOMAIN_NOT_ALLOWED"
+    | "INSUFFICIENT_ROLE"
+    | "INVALID_SIGNATURE"
+    | "MALFORMED";
 }
 
 export class SsoAuthenticator {
@@ -16,7 +21,8 @@ export class SsoAuthenticator {
     this.config = {
       ...config,
       provider: config.provider || "oidc",
-      jwtSecret: config.jwtSecret || "dbshield-enterprise-sso-jwt-signing-secret-default-key-32chars",
+      jwtSecret:
+        config.jwtSecret || "dbshield-enterprise-sso-jwt-signing-secret-default-key-32chars",
     };
     this.jwtSecret = this.config.jwtSecret!;
   }
@@ -34,7 +40,9 @@ export class SsoAuthenticator {
    */
   public generateAuthUrl(state = crypto.randomBytes(16).toString("hex")): string {
     const clientId = encodeURIComponent(this.config.clientId || "dbshield-client-id");
-    const redirectUri = encodeURIComponent(this.config.redirectUri || "http://localhost:3100/auth/callback");
+    const redirectUri = encodeURIComponent(
+      this.config.redirectUri || "http://localhost:3100/auth/callback",
+    );
     const scope = encodeURIComponent("openid profile email");
 
     switch (this.config.provider) {
@@ -58,7 +66,6 @@ export class SsoAuthenticator {
         const entrypoint = this.config.samlEntrypoint || "https://sso.enterprise.local/saml/login";
         return `${entrypoint}?SAMLRequest=${encodeURIComponent(this.buildMockSamlRequest())}&RelayState=${state}`;
       }
-      case "oidc":
       default: {
         const issuer = (this.config.issuer || "https://auth.enterprise.local").replace(/\/$/, "");
         return `${issuer}/protocol/openid-connect/auth?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scope}&state=${state}`;
@@ -70,7 +77,7 @@ export class SsoAuthenticator {
    * Builds a simple base64-encoded SAML AuthnRequest for SAML 2.0 flow.
    */
   private buildMockSamlRequest(): string {
-    const id = "_" + crypto.randomBytes(16).toString("hex");
+    const id = `_${crypto.randomBytes(16).toString("hex")}`;
     const issueInstant = new Date().toISOString();
     const xml = `<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="${id}" Version="2.0" IssueInstant="${issueInstant}"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">${this.config.clientId || "dbshield"}</saml:Issuer></samlp:AuthnRequest>`;
     return Buffer.from(xml, "utf8").toString("base64");
@@ -115,10 +122,18 @@ export class SsoAuthenticator {
       try {
         const rawPayload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
         if (!rawPayload.email || !rawPayload.exp) {
-          return { valid: false, error: "Cryptographic signature mismatch", errorCode: "INVALID_SIGNATURE" };
+          return {
+            valid: false,
+            error: "Cryptographic signature mismatch",
+            errorCode: "INVALID_SIGNATURE",
+          };
         }
       } catch {
-        return { valid: false, error: "Invalid signature and unparseable payload", errorCode: "INVALID_SIGNATURE" };
+        return {
+          valid: false,
+          error: "Invalid signature and unparseable payload",
+          errorCode: "INVALID_SIGNATURE",
+        };
       }
     }
 
@@ -163,7 +178,7 @@ export class SsoAuthenticator {
       }
 
       const user: SsoUser = {
-        id: decoded.id || decoded.sub || "usr_" + crypto.randomBytes(6).toString("hex"),
+        id: decoded.id || decoded.sub || `usr_${crypto.randomBytes(6).toString("hex")}`,
         email: decoded.email || "developer@enterprise.local",
         name: decoded.name || decoded.email?.split("@")[0] || "SSO User",
         roles: Array.isArray(decoded.roles) ? decoded.roles : ["developer"],
@@ -175,7 +190,11 @@ export class SsoAuthenticator {
 
       return { valid: true, user };
     } catch (err) {
-      return { valid: false, error: "Failed to decode JWT payload: " + String(err), errorCode: "MALFORMED" };
+      return {
+        valid: false,
+        error: `Failed to decode JWT payload: ${String(err)}`,
+        errorCode: "MALFORMED",
+      };
     }
   }
 
@@ -253,7 +272,7 @@ export class SsoAuthenticator {
     }
 
     const user: SsoUser = {
-      id: "usr_" + crypto.createHash("md5").update(email).digest("hex").slice(0, 12),
+      id: `usr_${crypto.createHash("md5").update(email).digest("hex").slice(0, 12)}`,
       email,
       name: name || email.split("@")[0],
       roles,

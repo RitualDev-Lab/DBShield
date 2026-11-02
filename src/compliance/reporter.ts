@@ -28,7 +28,8 @@ export class ComplianceReporter {
     const framework = options.framework || "soc2";
     const reportId = `rep_${framework.toLowerCase()}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
     const generatedAt = new Date().toISOString();
-    const company = options.companyName || this.config.compliance?.companyName || "Ritual Enterprise";
+    const company =
+      options.companyName || this.config.compliance?.companyName || "Ritual Enterprise";
     const environment = options.environment || this.config.compliance?.environment || "production";
 
     // 1. Cryptographic Audit Log Proofs
@@ -43,7 +44,9 @@ export class ComplianceReporter {
 
     const auditEntries = this.auditLogger ? this.auditLogger.getEntries({ limit: 1000 }) : [];
     const blockedCount = auditEntries.filter((e) => e.status === "BLOCKED").length;
-    const committedCount = auditEntries.filter((e) => e.status === "COMMITTED" || e.status === "SUCCESS").length;
+    const committedCount = auditEntries.filter(
+      (e) => e.status === "COMMITTED" || e.status === "SUCCESS",
+    ).length;
     const dryRunApproved = auditEntries.filter((e) => e.status === "DRY_RUN_APPROVED").length;
 
     // 2. PII Masking Proofs
@@ -158,7 +161,8 @@ export class ComplianceReporter {
         controlId: "A.12.4",
         controlTitle: "Logging & Tamper-Evident Monitoring",
         status: logVerification.valid ? "COMPLIANT" : "NON_COMPLIANT",
-        description: "Immutable cryptographically chained audit trails verified with zero broken links.",
+        description:
+          "Immutable cryptographically chained audit trails verified with zero broken links.",
         cryptographicProof: {
           entryCount: logVerification.totalVerified,
           hashChainVerified: logVerification.valid,
@@ -171,7 +175,8 @@ export class ComplianceReporter {
         controlId: "A.14.2",
         controlTitle: "Security in Development & Migration Lock Analysis",
         status: "COMPLIANT",
-        description: "Zero-downtime DDL advisor detects ACCESS EXCLUSIVE table locks and generates non-blocking plans.",
+        description:
+          "Zero-downtime DDL advisor detects ACCESS EXCLUSIVE table locks and generates non-blocking plans.",
       });
 
       proofs.push({
@@ -241,7 +246,12 @@ export class ComplianceReporter {
     env: string,
     logVerification: { valid: boolean; totalVerified: number; headHash: string; tailHash: string },
   ): string {
-    const statusColor = report.status === "PASS" ? "#10b981" : report.status === "NEEDS_REVIEW" ? "#f59e0b" : "#ef4444";
+    const statusColor =
+      report.status === "PASS"
+        ? "#10b981"
+        : report.status === "NEEDS_REVIEW"
+          ? "#f59e0b"
+          : "#ef4444";
 
     const rowsHtml = report.proofs
       .map(
@@ -339,36 +349,38 @@ export class ComplianceReporter {
   ): string {
     const title = `DBShield ${report.framework.toUpperCase()} Compliance Audit Report`;
     const lines = [
-      `================================================================================`,
+      "================================================================================",
       `                      ${title.toUpperCase()}`,
-      `================================================================================`,
-      ``,
+      "================================================================================",
+      "",
       `Report ID:        ${report.reportId}`,
       `Organization:     ${company}`,
       `Environment:      ${env}`,
       `Generated At:     ${report.generatedAt}`,
       `Status:           ${report.status} (${report.score}% COMPLIANT)`,
       `Summary:          ${report.summary}`,
-      ``,
-      `--------------------------------------------------------------------------------`,
-      `CONTROL VERIFICATION MATRIX`,
-      `--------------------------------------------------------------------------------`,
+      "",
+      "--------------------------------------------------------------------------------",
+      "CONTROL VERIFICATION MATRIX",
+      "--------------------------------------------------------------------------------",
     ];
 
     for (const p of report.proofs) {
       lines.push(`[${p.status}] ${p.controlId} - ${p.controlTitle}`);
       lines.push(`       ${p.description}`);
-      lines.push(``);
+      lines.push("");
     }
 
-    lines.push(`--------------------------------------------------------------------------------`);
-    lines.push(`CRYPTOGRAPHIC AUDIT CHAIN VERIFICATION (SHA-256)`);
-    lines.push(`--------------------------------------------------------------------------------`);
-    lines.push(`Hash Chain Valid:      ${logVerification.valid ? "YES (Integrity Intact)" : "NO (Tampered)"}`);
+    lines.push("--------------------------------------------------------------------------------");
+    lines.push("CRYPTOGRAPHIC AUDIT CHAIN VERIFICATION (SHA-256)");
+    lines.push("--------------------------------------------------------------------------------");
+    lines.push(
+      `Hash Chain Valid:      ${logVerification.valid ? "YES (Integrity Intact)" : "NO (Tampered)"}`,
+    );
     lines.push(`Total Blocks Verified: ${logVerification.totalVerified}`);
     lines.push(`Chain Head Hash:       ${logVerification.headHash}`);
     lines.push(`Auditor HMAC Seal:     ${report.auditorSignature}`);
-    lines.push(`================================================================================`);
+    lines.push("================================================================================");
 
     const textContent = lines.join("\n");
 

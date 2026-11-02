@@ -1,8 +1,8 @@
 import http from "node:http";
-import { type AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import { ChatOpsNotifier } from "../approval/chatops.js";
 import { ApprovalQueue } from "../approval/queue.js";
-import { type AuditLogEntry, AuditLogger } from "../audit/index.js";
+import type { AuditLogEntry, AuditLogger } from "../audit/index.js";
 import { SsoAuthenticator } from "../auth/sso.js";
 import { ComplianceReporter } from "../compliance/reporter.js";
 import type { DBShieldConfig, SsoUser } from "../types/index.js";
@@ -120,7 +120,7 @@ export class DashboardServer {
 
   private extractToken(req: http.IncomingMessage): string | null {
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    if (authHeader?.toLowerCase().startsWith("bearer ")) {
       return authHeader.slice(7).trim();
     }
     const cookieHeader = req.headers.cookie;
@@ -189,7 +189,9 @@ export class DashboardServer {
     if (pathname === "/auth/login") {
       if (!this.ssoAuthenticator || !this.ssoAuthenticator.isEnabled()) {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ssoEnabled: false, message: "SSO is not enabled on this server." }));
+        res.end(
+          JSON.stringify({ ssoEnabled: false, message: "SSO is not enabled on this server." }),
+        );
         return;
       }
 
@@ -227,7 +229,9 @@ export class DashboardServer {
 
       if (!callbackResult.success || !callbackResult.sessionToken) {
         res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(`<h1>SSO Authentication Failed</h1><p>${callbackResult.error || "Unknown error"}</p><a href="/auth/login">Try again</a>`);
+        res.end(
+          `<h1>SSO Authentication Failed</h1><p>${callbackResult.error || "Unknown error"}</p><a href="/auth/login">Try again</a>`,
+        );
         return;
       }
 
@@ -262,7 +266,12 @@ export class DashboardServer {
       const auth = this.authenticateUser(req);
       if (!auth.authenticated) {
         res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Unauthorized: SSO authentication required", loginUrl: "/auth/login" }));
+        res.end(
+          JSON.stringify({
+            error: "Unauthorized: SSO authentication required",
+            loginUrl: "/auth/login",
+          }),
+        );
         return;
       }
 
@@ -341,7 +350,7 @@ export class DashboardServer {
           );
         } catch (err) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Invalid Slack payload: " + String(err) }));
+          res.end(JSON.stringify({ error: `Invalid Slack payload: ${String(err)}` }));
         }
       });
       return;
@@ -371,7 +380,7 @@ export class DashboardServer {
           res.end(JSON.stringify({ success: result.success, status: result.status }));
         } catch (err) {
           res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Invalid Teams payload: " + String(err) }));
+          res.end(JSON.stringify({ error: `Invalid Teams payload: ${String(err)}` }));
         }
       });
       return;
@@ -379,11 +388,19 @@ export class DashboardServer {
 
     // Authenticate Protected API Endpoints
     const auth = this.authenticateUser(req);
-    const isProtectedApi = pathname.startsWith("/api/approvals") || pathname === "/api/audit" || pathname === "/api/stream";
+    const isProtectedApi =
+      pathname.startsWith("/api/approvals") ||
+      pathname === "/api/audit" ||
+      pathname === "/api/stream";
 
     if (isProtectedApi && !auth.authenticated) {
       res.writeHead(401, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Unauthorized: SSO authentication required", loginUrl: "/auth/login" }));
+      res.end(
+        JSON.stringify({
+          error: "Unauthorized: SSO authentication required",
+          loginUrl: "/auth/login",
+        }),
+      );
       return;
     }
 

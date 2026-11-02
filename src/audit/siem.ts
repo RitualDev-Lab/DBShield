@@ -79,7 +79,12 @@ export class SiemTelemetryStreamer {
     }
   }
 
-  public async flush(): Promise<{ success: boolean; sentCount: number; error?: string; airGapped?: boolean }> {
+  public async flush(): Promise<{
+    success: boolean;
+    sentCount: number;
+    error?: string;
+    airGapped?: boolean;
+  }> {
     if (
       !this.config.enabled ||
       !this.config.endpoint ||

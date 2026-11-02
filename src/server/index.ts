@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createDatabaseAdapter, InMemoryRedisAdapter } from "../adapters/index.js";
+import { InMemoryRedisAdapter, createDatabaseAdapter } from "../adapters/index.js";
 import { ApprovalQueue } from "../approval/queue.js";
 import { AuditLogger } from "../audit/index.js";
 import { loadConfig } from "../config/index.js";
