@@ -257,7 +257,7 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("DROP TABLE users;"));
-      for (let i = 0; i < 25 && receivedClientPackets.length === 0; i++) {
+      for (let i = 0; i < 25 && !Buffer.concat(receivedClientPackets).includes(0x5a); i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
 
@@ -280,7 +280,7 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("UPDATE users SET is_active = true;"));
-      for (let i = 0; i < 25 && receivedClientPackets.length === 0; i++) {
+      for (let i = 0; i < 25 && !Buffer.concat(receivedClientPackets).includes(0x5a); i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
 
