@@ -3,30 +3,84 @@
 
 DBShield is an open-source, safety-first database guardrail and wire proxy designed to prevent autonomous AI coding agents (Claude Code, Cursor, Windsurf, Devin, Codex) from executing catastrophic DDL, running unconstrained bulk mutations, or leaking customer PII into model contexts.
 
-Website: https://ritualdev.in/dbshield/
-Repository: https://github.com/RitualDev-Lab/DBShield
-Extension: https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense
+Canonical Homepage: https://ritualdev.in/dbshield/
+GitHub Repository: https://github.com/RitualDev-Lab/DBShield
+IDE Extension: https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense
 License: MIT
 
-## Quick Start CLI
+## Quick Install
 ```bash
-# Install via Homebrew
-brew tap ritualdev-lab/tap && brew install dbshield
-
-# Install via npm
+# Global CLI
 npm install -g @ritualdev-lab/dbshield
-
-# Start the DBShield wire proxy on port 5433 with upstream PostgreSQL
-dbshield proxy --port 5433 --upstream postgres://user:pass@localhost:5432/main
-
-# Run in MCP server mode for Claude Desktop / Cursor
-dbshield mcp --db postgres://user:pass@localhost:5432/main
+# or Homebrew
+brew tap ritualdev-lab/tap && brew install dbshield
 ```
 
-## Core Security & Guardrail Architecture
-- **SQL AST Inspection**: Parses and validates SQL syntax trees before execution. Traps missing `WHERE` clauses, tautologies (`WHERE 1=1`), and unauthorized `DROP`/`TRUNCATE` operations.
-- **Virtual Schema Masking & Column-Level RBAC**: Dynamically intercepts `information_schema` and `pg_catalog` queries. Internal tables (`credentials`, `audit_logs`, `admin_keys`) and PII columns are hidden from agent introspection.
-- **Two-Phase Distributed Dry-Run Tokens**: Runs queries in transactional isolation (`BEGIN ... ROLLBACK`), previews affected row counts and diffs, and issues a cryptographic commit token valid only upon human approval.
-- **ChatOps Live Approval Bot**: Dispatches interactive HMAC-SHA256 verified Block Kit and AdaptiveCard messages to corporate Slack (`#db-approvals`) and Microsoft Teams channels with 1-click `[Approve ✅]` and `[Reject ❌]` actions.
-- **Missing Index & Query Plan Advisor**: Detects full-table sequential scans and suggests optimal `CREATE INDEX CONCURRENTLY` DDL statements before performance regressions reach production.
-- **Universal Protocol Compatibility**: Supports PostgreSQL wire protocol (v3.0), SQLite, MySQL, and Model Context Protocol (MCP) transports (stdio / SSE).
+## Immediate CLI Usage
+```bash
+# 1. Start the DBShield wire proxy on port 5433 with upstream PostgreSQL
+dbshield proxy --port 5433 --upstream postgres://user:pass@localhost:5432/production_db
+
+# 2. Run in Model Context Protocol (MCP) server mode for Claude Desktop / Cursor
+dbshield mcp --db postgres://user:pass@localhost:5432/production_db
+
+# 3. Dry-run and validate a risky SQL migration script
+dbshield validate --file ./migrations/004_update_users.sql
+```
+
+## Programmatic TypeScript / Node.js API
+Use this snippet when integrating DBShield query guardrails into an agent backend:
+
+```typescript
+import { DBShield, GuardrailPolicy } from "@ritualdev-lab/dbshield";
+
+// Initialize DBShield with strict safety guardrails
+const dbGuard = new DBShield({
+  upstreamUrl: process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/main",
+  policy: {
+    maxAffectedRows: 50,                // Blocks unconstrained UPDATE/DELETE without tight LIMIT/WHERE
+    prohibitDestructiveDDL: true,      // Intercepts DROP, TRUNCATE, ALTER TABLE DROP COLUMN
+    maskTables: ["user_credentials", "audit_secrets"],
+    maskColumns: ["ssn", "password_hash", "credit_card"],
+    requireDryRunApproval: true        // Dispatches approval prompt if mutation affects > 10 rows
+  }
+});
+
+// Validate query before sending to database wire
+const agentQuery = "DELETE FROM users WHERE created_at < NOW()";
+const analysis = await dbGuard.inspect(agentQuery);
+
+if (!analysis.safe) {
+  console.error("Query blocked by DBShield:", analysis.reasons);
+  // Returns: ["Missing WHERE primary key index", "Potential full table purge detected"]
+} else {
+  // Execute safely in two-phase isolated transaction
+  const result = await dbGuard.execute(agentQuery);
+  console.log("Safe result:", result);
+}
+```
+
+## MCP Server Configuration
+Add to `claude_desktop_config.json` or `.cursor/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "dbshield": {
+      "command": "npx",
+      "args": [
+        "-y", 
+        "@ritualdev-lab/dbshield", 
+        "mcp", 
+        "--db", 
+        "postgres://user:pass@localhost:5432/my_db"
+      ]
+    }
+  }
+}
+```
+
+## Core Architectural Guarantees
+- Sub-0.25ms AST query parsing and validation overhead.
+- Virtual schema masking hiding sensitive internal schemas from AI metadata queries.
+- Two-phase dry-run transactions (`BEGIN ... ROLLBACK`) with HMAC approval tokens.
+- ChatOps approval integration dispatching 1-click approvals to Slack and Microsoft Teams.

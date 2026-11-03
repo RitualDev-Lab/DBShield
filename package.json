@@ -24,17 +24,16 @@
     "check": "biome check ."
   },
   "keywords": [
-    "mcp",
-    "model-context-protocol",
+    "ai-agent-security",
     "mcp-server",
+    "sandbox",
+    "developer-tools",
+    "cursor-ide",
+    "windsurf-ai",
+    "llm-security",
     "database-security",
     "sql-guardrail",
-    "cursor",
-    "claude-desktop",
-    "ast-parser",
-    "sandboxing",
-    "dry-run",
-    "pii-masking",
+    "wire-proxy",
     "postgres",
     "sqlite",
     "mysql"
@@ -48,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/RitualDev-Lab/DBShield/issues"
   },
-  "homepage": "https://github.com/RitualDev-Lab/DBShield#readme",
+  "homepage": "https://ritualdev.in/dbshield/",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.1",
     "node-sql-parser": "^5.3.7",
