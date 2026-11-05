@@ -27,7 +27,7 @@
     "prepack": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/cli.js",
-    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "test": "tsx --test",
     "benchmark": "python benchmarks/proxy_overhead_benchmark.py",
     "prepublishOnly": "npm run build && npm test && npm pack --dry-run",
     "lint": "biome check .",
@@ -73,6 +73,6 @@
     "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   }
 }
