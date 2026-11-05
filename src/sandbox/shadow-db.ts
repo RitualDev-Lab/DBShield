@@ -15,7 +15,10 @@ export interface ShadowResult {
 }
 
 export class VirtualShadowDatabase {
-  private readonly shadowTables = new Map<string, { columns: string[]; rows: Record<string, unknown>[] }>();
+  private readonly shadowTables = new Map<
+    string,
+    { columns: string[]; rows: Record<string, unknown>[] }
+  >();
   private readonly droppedTables = new Set<string>();
 
   constructor() {
@@ -58,7 +61,9 @@ export class VirtualShadowDatabase {
     const start = performance.now();
     const clean = sql.trim();
     const upper = clean.toUpperCase();
-    const warnings: string[] = ["[SHADOW_INTERCEPTED] Destructive query executed inside ephemeral copy-on-write virtual shadow database."];
+    const warnings: string[] = [
+      "[SHADOW_INTERCEPTED] Destructive query executed inside ephemeral copy-on-write virtual shadow database.",
+    ];
 
     if (upper.startsWith("DROP TABLE")) {
       const parts = clean.split(/\s+/);
@@ -77,7 +82,9 @@ export class VirtualShadowDatabase {
 
     if (upper.startsWith("TRUNCATE")) {
       const parts = clean.split(/\s+/);
-      const tableName = (parts[1] === "TABLE" ? parts[2] : parts[1] || "unknown").replace(/;/g, "").toLowerCase();
+      const tableName = (parts[1] === "TABLE" ? parts[2] : parts[1] || "unknown")
+        .replace(/;/g, "")
+        .toLowerCase();
       const tbl = this.shadowTables.get(tableName);
       const rowsCount = tbl ? tbl.rows.length : 10;
       if (tbl) tbl.rows = [];
@@ -97,7 +104,10 @@ export class VirtualShadowDatabase {
         commandTag: "DELETE 42",
         affectedRows: 42,
         executionTimeMs: Math.max(0.1, performance.now() - start),
-        warnings: [...warnings, "[SIMULATED_SUCCESS] Unconstrained DELETE simulated safely without host data loss."],
+        warnings: [
+          ...warnings,
+          "[SIMULATED_SUCCESS] Unconstrained DELETE simulated safely without host data loss.",
+        ],
       };
     }
 
@@ -107,7 +117,10 @@ export class VirtualShadowDatabase {
         commandTag: "UPDATE 42",
         affectedRows: 42,
         executionTimeMs: Math.max(0.1, performance.now() - start),
-        warnings: [...warnings, "[SIMULATED_SUCCESS] Unconstrained UPDATE simulated safely without host data loss."],
+        warnings: [
+          ...warnings,
+          "[SIMULATED_SUCCESS] Unconstrained UPDATE simulated safely without host data loss.",
+        ],
       };
     }
 

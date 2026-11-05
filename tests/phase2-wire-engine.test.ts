@@ -1,9 +1,9 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { 
-  HighConcurrencyConnectionPool, 
-  VirtualShadowDatabase, 
-  ProtocolWireMasker 
+import { describe, it } from "node:test";
+import {
+  HighConcurrencyConnectionPool,
+  ProtocolWireMasker,
+  VirtualShadowDatabase,
 } from "../src/index.js";
 
 describe("Phase 2 (DBShield): High-Concurrency Connection Pooling", () => {
