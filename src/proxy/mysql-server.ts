@@ -188,8 +188,9 @@ export class MysqlWireProxy {
       }
     };
 
-    clientSocket.on("data", (chunk: Buffer) => {
-      clientBuffer = Buffer.concat([clientBuffer, chunk]);
+    clientSocket.on("data", (chunk: Buffer | string) => {
+      const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      clientBuffer = Buffer.concat([clientBuffer, buf]);
 
       while (hasCompleteMysqlPacket(clientBuffer)) {
         const packet = decodeMysqlPacket(clientBuffer);

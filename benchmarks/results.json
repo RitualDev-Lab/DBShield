@@ -1,8 +1,8 @@
 {
   "total_queries_tested": 4000,
-  "throughput_qps": 1086926,
-  "latency_p50_ms": 0.0005,
-  "latency_p95_ms": 0.0009,
-  "latency_p99_ms": 0.0011,
-  "average_ms": 0.0005
+  "throughput_qps": 2280761,
+  "latency_p50_ms": 0.0004,
+  "latency_p95_ms": 0.0005,
+  "latency_p99_ms": 0.0005,
+  "average_ms": 0.0003
 }

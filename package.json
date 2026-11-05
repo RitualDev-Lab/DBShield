@@ -6,9 +6,18 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "dbshield": "dist/cli.js"
+    "dbshield": "dist/cli.js",
+    "dbs": "dist/cli.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SKILL.md",
+    "action.yml",
+    "ENTERPRISE_SLA.md",
+    "SOC2_ISO27001_COMPLIANCE.md"
+  ],
   "publishConfig": {
     "access": "public",
     "provenance": true
@@ -18,7 +27,9 @@
     "prepack": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/cli.js",
-    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "test": "tsx --test",
+    "benchmark": "python benchmarks/proxy_overhead_benchmark.py",
+    "prepublishOnly": "npm run build && npm test && npm pack --dry-run",
     "lint": "biome check .",
     "format": "biome format --write .",
     "check": "biome check ."
@@ -62,6 +73,6 @@
     "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=20.0.0"
   }
 }

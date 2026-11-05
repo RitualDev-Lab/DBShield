@@ -74,6 +74,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Reconfigure for GitHub Packages
+        continue-on-error: true
+        run: |
+          echo "@ritualdev-lab:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
+          pnpm publish --no-git-checks --provenance=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release with SBOM Artifacts
         uses: softprops/action-gh-release@c062e08bd5328157348241fa0833b7d8b97943b7 # v2.0.8
         with:

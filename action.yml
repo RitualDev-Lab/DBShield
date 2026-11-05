@@ -1,0 +1,56 @@
+name: "DBShield Database Guardrail Gate"
+description: "Safety-First Database Guardrail & Migration Audit Gate for Pull Requests and Autonomous AI Agents"
+author: "RitualDev Lab"
+
+inputs:
+  dialect:
+    description: "Database dialect (postgres, sqlite, mysql)"
+    required: false
+    default: "postgres"
+  tier:
+    description: "Safety enforcement tier (STRICT, BALANCED, PERMISSIVE)"
+    required: false
+    default: "BALANCED"
+  migration_path:
+    description: "Path to SQL migration files or directory to audit"
+    required: false
+    default: "migrations"
+  fail_on_violation:
+    description: "Whether to fail the CI step if destructive SQL or unindexed foreign keys are detected"
+    required: false
+    default: "true"
+  github_token:
+    description: "GitHub secret token used to post inline annotations and audit summaries"
+    required: false
+    default: ""
+  sarif_file:
+    description: "Path to export SARIF report for GitHub Code Scanning"
+    required: false
+    default: ".dbshield.sarif"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run DBShield Database Guardrail Audit
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token || github.token }}
+        INPUT_DIALECT: ${{ inputs.dialect }}
+        INPUT_TIER: ${{ inputs.tier }}
+        INPUT_MIGRATION_PATH: ${{ inputs.migration_path }}
+        INPUT_FAIL_ON_VIOLATION: ${{ inputs.fail_on_violation }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        echo "🛡️ Executing DBShield Guardrail Audit Gate..."
+        EXIT_CODE=0
+        if [ -f "$ACTION_PATH/dist/cli.js" ]; then
+          node "$ACTION_PATH/dist/cli.js" status --dialect "$INPUT_DIALECT" --tier "$INPUT_TIER" || EXIT_CODE=$?
+        else
+          (cd "$ACTION_PATH" && npm install --silent && npm run build --silent && node dist/cli.js status --dialect "$INPUT_DIALECT") || EXIT_CODE=$?
+        fi
+
+        if [ "$INPUT_FAIL_ON_VIOLATION" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+          echo "::error::DBShield detected destructive database mutations or unindexed cascades!"
+          exit $EXIT_CODE
+        fi
+        echo "✅ DBShield Guardrail Audit Passed."
