@@ -282,8 +282,9 @@ export class PostgresWireProxy {
       }
     };
 
-    clientSocket.on("data", (chunk) => {
-      clientBuffer = Buffer.concat([clientBuffer, chunk]);
+    clientSocket.on("data", (chunk: Buffer | string) => {
+      const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      clientBuffer = Buffer.concat([clientBuffer, buf]);
 
       while (clientBuffer.length > 0) {
         const parsed = parseFrontendFrame(clientBuffer, expectingStartup);

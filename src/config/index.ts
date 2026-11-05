@@ -38,7 +38,7 @@ export const ConfigSchema = z.object({
       batchSize: z.number().int().positive().default(10),
       flushIntervalMs: z.number().int().positive().default(5000),
       streamBlockedOnly: z.boolean().default(false),
-      headers: z.record(z.string()).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     })
     .optional(),
   enableCostGate: z.boolean().default(true),
@@ -75,13 +75,14 @@ export const ConfigSchema = z.object({
     .object({
       enabled: z.boolean().default(true),
       hiddenTables: z.array(z.string()).default([]),
-      hiddenColumns: z.record(z.array(z.string())).default({}),
+      hiddenColumns: z.record(z.string(), z.array(z.string())).default({}),
       roles: z
         .record(
+          z.string(),
           z.object({
             allowedTables: z.array(z.string()).optional(),
             deniedTables: z.array(z.string()).optional(),
-            deniedColumns: z.record(z.array(z.string())).optional(),
+            deniedColumns: z.record(z.string(), z.array(z.string())).optional(),
           }),
         )
         .optional(),
