@@ -5,6 +5,9 @@
 **The Safety-First Database Guardrail & Sandboxing MCP Server for AI Coding Agents**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/@ritualdev-lab/dbshield.svg?color=cb3837&logo=npm)](https://www.npmjs.com/package/@ritualdev-lab/dbshield)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/RitualDev-Lab/DBShield/badge)](https://securityscorecards.dev/viewer/?repo=github.com/RitualDev-Lab/DBShield)
+[![SOC 2 Audit Ready](https://img.shields.io/badge/SOC%202%20Type%20II-Audit%20Ready-10b981?logo=shield&logoColor=white)](https://ritualdev.in/trust)
 [![Website](https://img.shields.io/badge/Website-ritualdev.in%2Fdbshield-00F59B.svg)](https://ritualdev.in/dbshield)
 [![IDE Extension](https://img.shields.io/badge/Open_VSX-Ritual_Agent_Defense-blue.svg)](https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-8A2BE2.svg)](https://modelcontextprotocol.io/)
@@ -294,6 +297,27 @@ helm install dbshield ./charts/dbshield \
 * `dbshield_queries_blocked_total{rule, severity}`: Queries intercepted and prevented
 * `dbshield_query_duration_seconds`: Histogram measuring query evaluation latency
 * `dbshield_cost_savings_dollars_total`: Estimated cloud spend saved from blocked runaway queries
+
+---
+
+## 🏛️ Enterprise Compliance & SLA Guarantees
+
+DBShield provides deterministic, zero-data-custody database protection backed by enterprise contractual assurances:
+
+* **Formal Enterprise Service Level Agreement**: [ENTERPRISE_SLA.md](./ENTERPRISE_SLA.md)  
+  Guaranteed response times: **< 1 hour** for P1 critical outages (24/7/365 coverage), **< 4 hours** for P2 high severity, **99.95%** availability SLA.
+* **SOC 2 Type II & ISO/IEC 27001:2022 Readiness Matrix**: [SOC2_ISO27001_COMPLIANCE.md](./SOC2_ISO27001_COMPLIANCE.md)  
+  Comprehensive AICPA Trust Services Criteria (CC1–CC9, A1, C1, PI1, P1–P8) and ISO 27001 Annex A mapping for enterprise procurement audits.
+* **Autonomous AI Coding Agent Skill Definition**: [SKILL.md](./SKILL.md)  
+  Standardized instructions and tool-calling directives for Antigravity, Cursor, Windsurf, and Claude Code.
+* **GitHub Action CI/CD Migration Gate**: [action.yml](./action.yml)  
+  Pre-merge migration validation and unindexed cascade lock detection (`uses: RitualDev-Lab/DBShield@v0.2.0`).
+
+### Enterprise Contact & Incident Triage
+* **Security & SOC 2 Packages**: `security@ritualdev.in`
+* **Commercial & SLA Support**: `support@ritualdev.in`
+* **Technical Architecture Review**: `developer@ritualdev.in`
+* **Trust & Security Portal**: [https://ritualdev.in/trust](https://ritualdev.in/trust)
 
 ---
 
