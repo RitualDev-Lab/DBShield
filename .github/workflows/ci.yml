@@ -52,6 +52,8 @@ jobs:
         run: pnpm run build
 
       - name: Run Performance Benchmark
+        env:
+          PYTHONIOENCODING: "utf-8"
         run: python benchmarks/proxy_overhead_benchmark.py
 
       - name: Run Test Suite

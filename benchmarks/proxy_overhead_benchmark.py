@@ -105,7 +105,7 @@ def main():
     out_path = os.path.join(os.path.dirname(__file__), "results.json")
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(res, f, indent=2)
-    print(f"\n[✓] Results persisted to: {out_path}")
+    print(f"\n[+] Results persisted to: {out_path}")
 
 if __name__ == "__main__":
     main()
