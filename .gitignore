@@ -9,3 +9,8 @@ dist/
 *.sqlite3
 coverage/
 .turbo/
+__pycache__/
+*.egg-info/
+*.pyc
+.pytest_cache/
+build/
