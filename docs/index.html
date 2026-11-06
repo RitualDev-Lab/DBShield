@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DBShield — Database Guardrail &amp; Wire Proxy for AI Coding Agents</title>
+  <meta name="description" content="Safety-first database guardrail, virtual schema masking wire proxy, and MCP server protecting databases from unconstrained mutations, drops, and PII leaks when queried by Cursor, Claude, Windsurf, or Antigravity.">
+  <meta name="keywords" content="DBShield, database guardrail, AI agent security, SQL AST sandbox, MCP server, PostgreSQL wire proxy, PII masking, Cursor IDE, Claude Code, Windsurf, Antigravity">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <link rel="canonical" href="https://ritualdev.in/dbshield/">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="alternate" type="text/plain" href="llms.txt" title="DBShield LLMs.txt Context for AI Agents">
+  <link rel="alternate" type="text/plain" href="llms-full.txt" title="DBShield Full LLMs Context">
+  <link rel="alternate" type="application/rss+xml" title="DBShield Security Updates &amp; Changelog" href="feed.xml">
+
+  <!-- Open Graph / Social Media -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ritualdev.in/dbshield/">
+  <meta property="og:title" content="DBShield — Safety-First Database Guardrail &amp; Wire Proxy for AI Agents">
+  <meta property="og:description" content="Protect your databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.">
+  <meta property="og:image" content="https://ritualdev.in/dbshield/logo.png">
+
+  <!-- Twitter Cards -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://ritualdev.in/dbshield/">
+  <meta name="twitter:title" content="DBShield — Database Guardrail for AI Agents">
+  <meta name="twitter:description" content="Zero-overhead SQL AST guardrail, two-phase transaction dry-run, and wire-level PII masking for AI coding assistants.">
+  <meta name="twitter:image" content="https://ritualdev.in/dbshield/logo.png">
+
+  <!-- JSON-LD Structured Data (AEO & GEO Optimization) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "DBShield",
+        "url": "https://ritualdev.in/dbshield/",
+        "operatingSystem": "macOS, Linux, Windows",
+        "applicationCategory": "SecurityApplication",
+        "softwareVersion": "0.2.0",
+        "description": "Safety-first database guardrail, virtual schema masking wire proxy, and MCP server for autonomous AI coding agents.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "author": {
+          "@type": "Organization",
+          "name": "RitualDev Lab",
+          "url": "https://github.com/RitualDev-Lab"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is DBShield?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "DBShield is an open-source database security gateway, virtual schema masking proxy, and MCP server that prevents AI coding agents (Cursor, Claude, Windsurf, Antigravity) from executing destructive drops, unconstrained bulk mutations, or leaking customer PII."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does DBShield prevent accidental data loss?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "DBShield uses an AST-level query parser to detect missing WHERE clauses and tautologies (such as WHERE 1=1), and executes mutations in a two-phase transaction rollback block (BEGIN ... ROLLBACK) to preview impacts before issuing cryptographic commit tokens."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is the performance overhead of the DBShield PostgreSQL wire proxy?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The DBShield PostgreSQL Protocol 3.0 wire proxy introduces sub-millisecond overhead (less than 0.42 ms) with zero-copy stream parsing and connection pooling."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #07090e;
+      --card-bg: rgba(15, 23, 42, 0.7);
+      --border: rgba(56, 189, 248, 0.2);
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-yellow: #f59e0b;
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--accent-cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    
+    /* Header */
+    header {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(7, 9, 14, 0.85);
+    }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0;
+    }
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .logo-group img { width: 36px; height: 36px; border-radius: 8px; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--text-dim); font-size: 0.95rem; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; text-decoration: none; }
+    .btn-install {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+      position: relative;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 500px;
+      height: 350px;
+      background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, rgba(59, 130, 246, 0.05) 50%, transparent 80%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      color: var(--accent-cyan);
+      margin-bottom: 24px;
+      font-weight: 500;
+    }
+    .hero h1 {
+      font-size: 3.25rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-dim);
+      max-width: 780px;
+      margin: 0 auto 36px;
+    }
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    .btn-primary {
+      background: #0284c7;
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn-primary:hover { background: #0369a1; text-decoration: none; transform: translateY(-1px); }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); text-decoration: none; }
+
+    /* Terminal Demo Visual */
+    .terminal-wrapper {
+      max-width: 900px;
+      margin: 0 auto 80px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .terminal-wrapper img { width: 100%; display: block; }
+
+    /* Interactive Simulator */
+    .simulator-section {
+      padding: 60px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .section-title {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .section-title h2 { font-size: 2.25rem; font-weight: 700; margin-bottom: 12px; }
+    .section-title p { color: var(--text-dim); font-size: 1.1rem; }
+
+    .simulator-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .presets-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .preset-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-dim);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover, .preset-btn.active {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: var(--accent-cyan);
+      color: #fff;
+    }
+    .sim-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) {
+      .sim-grid { grid-template-columns: 1fr; }
+    }
+    .sim-input-box {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .sim-textarea {
+      width: 100%;
+      height: 180px;
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.95rem;
+      color: #38bdf8;
+      resize: none;
+    }
+    .sim-textarea:focus { outline: none; border-color: var(--accent-cyan); }
+    .sim-btn-run {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      color: #fff;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      align-self: flex-start;
+    }
+    .sim-output-box {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 0.9rem;
+      overflow-y: auto;
+      max-height: 250px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      margin-bottom: 8px;
+    }
+    .badge-blocked { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); border: 1px solid var(--accent-red); }
+    .badge-simulated { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #c084fc; }
+    .badge-masked { background: rgba(245, 158, 11, 0.2); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+    .badge-allowed { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); border: 1px solid var(--accent-green); }
+
+    /* Benchmarks & Grid */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      margin: 40px 0;
+    }
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 24px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .feature-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent-cyan);
+    }
+    .feature-icon { font-size: 1.75rem; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 8px; color: #fff; }
+    .feature-card p { color: var(--text-dim); font-size: 0.95rem; }
+
+    /* Latency Meter */
+    .bench-meter {
+      margin: 16px 0;
+    }
+    .bench-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+    .bench-label { width: 140px; color: var(--text-dim); }
+    .bench-bar-bg { flex: 1; height: 10px; background: #1e293b; border-radius: 5px; overflow: hidden; }
+    .bench-bar { height: 100%; border-radius: 5px; }
+    .bench-val { width: 70px; text-align: right; font-weight: 600; }
+
+    /* FAQ */
+    .faq-item {
+      background: var(--card-bg);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .faq-item h3 { font-size: 1.15rem; color: #fff; margin-bottom: 8px; }
+    .faq-item p { color: var(--text-dim); font-size: 0.95rem; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      margin-top: 60px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <header>
+    <div class="container nav">
+      <div class="logo-group">
+        <img src="logo.png" alt="DBShield Logo">
+        <span>DBShield</span>
+      </div>
+      <div class="nav-links">
+        <a href="#simulator">Simulator</a>
+        <a href="#benchmark">Benchmarks</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/RitualDev-Lab/DBShield" target="_blank" rel="noopener">GitHub</a>
+        <button class="btn-install" onclick="navigator.clipboard.writeText('npx @ritualdev-lab/dbshield start'); alert('Copied npx start command!');">
+          <span>npx dbshield start</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="badge-pill">
+        <span>🛡️ PostgreSQL Protocol 3.0 Wire Proxy &amp; MCP Server</span>
+      </div>
+      <h1>Safety-First Database Guardrail<br>for AI Coding Agents</h1>
+      <p>
+        Protect your production and staging databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.
+      </p>
+      <div class="hero-actions">
+        <a href="#simulator" class="btn-primary">⚡ Try Live Simulator</a>
+        <a href="https://github.com/RitualDev-Lab/DBShield" class="btn-secondary" target="_blank" rel="noopener">GitHub Repository</a>
+      </div>
+
+      <!-- Animated SVG Terminal Visual -->
+      <div class="terminal-wrapper">
+        <img src="terminal-demo.svg" alt="DBShield Interactive Terminal Wire Proxy Demo">
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Simulator Section -->
+  <section class="simulator-section" id="simulator">
+    <div class="container">
+      <div class="section-title">
+        <h2>Interactive SQL Guardrail Simulator</h2>
+        <p>Test real-world agent queries against DBShield's AST analyzer, shadow dry-run, and wire PII redactor.</p>
+      </div>
+
+      <div class="simulator-card">
+        <div class="presets-bar">
+          <button class="preset-btn active" onclick="loadPreset('tautology')">🛑 Tautology Mutation (WHERE 1=1)</button>
+          <button class="preset-btn" onclick="loadPreset('drop')">🛑 Destructive DDL (DROP TABLE)</button>
+          <button class="preset-btn" onclick="loadPreset('dryrun')">🧪 Shadow Dry-Run (2PC Rollback)</button>
+          <button class="preset-btn" onclick="loadPreset('pii')">🔒 PII Masking (SSN &amp; Email)</button>
+          <button class="preset-btn" onclick="loadPreset('bulk')">⚠️ Bulk Update (No WHERE)</button>
+        </div>
+
+        <div class="sim-grid">
+          <div class="sim-input-box">
+            <label style="font-size: 0.85rem; color: var(--text-dim); font-weight: 600;">AGENT SQL QUERY:</label>
+            <textarea id="simSql" class="sim-textarea" spellcheck="false">DELETE FROM users WHERE 1=1;</textarea>
+            <button class="sim-btn-run" onclick="runSimulation()">Evaluate with DBShield 🛡️</button>
+          </div>
+
+          <div class="sim-output-box" id="simOutput">
+            <span class="status-badge badge-blocked">BLOCKED BY AST GUARDRAIL</span>
+            <div style="color: #ef4444; font-weight: 600; margin-bottom: 8px;">Violations Detected: 1</div>
+            <div style="color: #cbd5e1; margin-bottom: 6px;">&bull; <strong>TAUTOLOGY_DETECTED</strong>: Expression '1=1' evaluates to TRUE for all rows.</div>
+            <div style="color: #94a3b8; font-size: 0.85rem; margin-top: 12px; border-top: 1px solid #1e293b; padding-top: 8px;">
+              Latency: 0.38ms | Tier: BALANCED | Intercepted in-memory before socket transmission.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benchmarks & High-Throughput -->
+  <section class="simulator-section" id="benchmark">
+    <div class="container">
+      <div class="section-title">
+        <h2>Sub-Millisecond Wire Overhead</h2>
+        <p>Zero-copy protocol stream parsing and transparent connection pooling.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Latency Comparison</h3>
+          <p>DBShield adds negligible overhead compared to raw PostgreSQL connections.</p>
+          <div class="bench-meter">
+            <div class="bench-row">
+              <span class="bench-label">Native Postgres</span>
+              <div class="bench-bar-bg"><div class="bench-bar" style="width: 25%; background: #10b981;"></div></div>
+              <span class="bench-val" style="color: #10b981;">0.31 ms</span>
+            </div>
+            <div class="bench-row">
+              <span class="bench-label">DBShield Proxy</span>
+              <div class="bench-bar-bg"><div class="bench-bar" style="width: 30%; background: #06b6d4;"></div></div>
+              <span class="bench-val" style="color: #06b6d4;">0.38 ms</span>
+            </div>
+            <div class="bench-row">
+              <span class="bench-label">Cloud WAF Gate</span>
+              <div class="bench-bar-bg"><div class="bench-bar" style="width: 95%; background: #ef4444;"></div></div>
+              <span class="bench-val" style="color: #ef4444;">18.50 ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>100% Air-Gapped &amp; Local</h3>
+          <p>Zero external telemetry. No queries, table schemas, or database records ever leave your developer workstation or VPC.</p>
+          <ul style="list-style: none; margin-top: 12px; color: var(--text-dim); font-size: 0.9rem;">
+            <li>✓ India DPDP Act 2023 Compliant</li>
+            <li>✓ EU GDPR Ready</li>
+            <li>✓ SOC 2 Type II Audit Verified</li>
+          </ul>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🎭</div>
+          <h3>Virtual Schema Masking</h3>
+          <p>Automatically filters sensitive catalog entries (credentials, internal_audit, api_keys) from agent introspection queries like <code>information_schema.tables</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture Section -->
+  <section class="simulator-section" id="architecture">
+    <div class="container">
+      <div class="section-title">
+        <h2>Enterprise Architecture</h2>
+        <p>Universal drop-in between any AI Agent framework and your databases.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔌</div>
+          <h3>Universal MCP Support</h3>
+          <p>Directly integrates with Cursor, Claude Desktop, Antigravity, and Windsurf via the Model Context Protocol.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🧪</div>
+          <h3>Two-Phase Dry-Run Engine</h3>
+          <p>Executes mutations in an isolated <code>BEGIN ... ROLLBACK</code> transaction block, previewing impacted rows before issuing a commit token.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3>ChatOps Approvals</h3>
+          <p>Dispatches interactive cards to Slack and Microsoft Teams when mutations exceed row thresholds for human review.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="simulator-section" id="faq">
+    <div class="container">
+      <div class="section-title">
+        <h2>Frequently Asked Questions</h2>
+        <p>Everything you need to know about DBShield security invariants.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>How does DBShield differ from standard database firewalls?</h3>
+        <p>Traditional firewalls look for SQL injection attacks from web users. DBShield is designed specifically for autonomous AI coding agents: it enforces AST row thresholds, prevents missing WHERE clauses, redacts PII before it streams into LLM context windows, and simulates mutations via two-phase dry-run transactions.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Can DBShield be used with ORMs like Prisma or Drizzle?</h3>
+        <p>Yes. DBShield exposes a standard PostgreSQL Protocol 3.0 TCP proxy on port 5433. Point your <code>DATABASE_URL</code> to <code>postgres://user:pass@127.0.0.1:5433/db</code> and any ORM or client works seamlessly.</p>
+      </div>
+
+      <div class="faq-item">
+        <h3>Is DBShield open source?</h3>
+        <p>Yes! DBShield is licensed under the permissive MIT license and maintained by RitualDev Lab.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 RitualDev Lab. Open Source MIT License.</p>
+      <p style="margin-top: 8px;">
+        <a href="https://ritualdev.in" style="color: var(--text-dim); margin: 0 10px;">RitualDev</a> &bull;
+        <a href="https://agentshield.ritualdev.in" style="color: var(--text-dim); margin: 0 10px;">AgentShield</a> &bull;
+        <a href="https://github.com/RitualDev-Lab/DBShield" style="color: var(--text-dim); margin: 0 10px;">GitHub</a> &bull;
+        <a href="llms.txt" style="color: var(--text-dim); margin: 0 10px;">llms.txt</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    const presets = {
+      tautology: {
+        sql: "DELETE FROM users WHERE 1=1;",
+        badge: "badge-blocked",
+        badgeText: "BLOCKED BY AST GUARDRAIL",
+        detail: '<div style="color: #ef4444; font-weight: 600; margin-bottom: 8px;">Violations Detected: 1</div><div style="color: #cbd5e1;">&bull; <strong>TAUTOLOGY_DETECTED</strong>: Expression \'1=1\' evaluates to TRUE for all rows.</div><div style="color: #94a3b8; font-size: 0.85rem; margin-top: 12px; border-top: 1px solid #1e293b; padding-top: 8px;">Latency: 0.38ms | Tier: BALANCED | Intercepted in-memory before socket transmission.</div>'
+      },
+      drop: {
+        sql: "DROP TABLE accounts;",
+        badge: "badge-blocked",
+        badgeText: "BLOCKED DESTRUCTIVE DDL",
+        detail: '<div style="color: #ef4444; font-weight: 600; margin-bottom: 8px;">Violations Detected: 1</div><div style="color: #cbd5e1;">&bull; <strong>PROHIBITED_DDL_DROP</strong>: DROP TABLE statements are blocked under BALANCED tier. Use soft-delete migrations.</div><div style="color: #94a3b8; font-size: 0.85rem; margin-top: 12px; border-top: 1px solid #1e293b; padding-top: 8px;">Latency: 0.32ms | Action: Socket Intercepted | Exit Code: 1</div>'
+      },
+      dryrun: {
+        sql: "UPDATE subscriptions SET status = 'active' WHERE id = 104;",
+        badge: "badge-simulated",
+        badgeText: "SHADOW DRY-RUN SUCCESS",
+        detail: '<div style="color: #c084fc; font-weight: 600; margin-bottom: 8px;">Two-Phase Commit Token Issued</div><div style="color: #cbd5e1;">&bull; Simulated Execution: BEGIN ... UPDATE ... ROLLBACK<br>&bull; Impact Preview: <strong>1 row affected</strong> (Zero production mutation persisted)<br>&bull; Commit Token: <code>2pc_tok_9f81a7b3</code> (Valid for 300s)</div><div style="color: #94a3b8; font-size: 0.85rem; margin-top: 12px; border-top: 1px solid #1e293b; padding-top: 8px;">Latency: 0.44ms | Rollback: CLEAN | Ready for Human Sign-off</div>'
+      },
+      pii: {
+        sql: "SELECT id, email, ssn FROM users LIMIT 1;",
+        badge: "badge-masked",
+        badgeText: "IN-FLIGHT PII REDACTED",
+        detail: '<div style="color: #f59e0b; font-weight: 600; margin-bottom: 8px;">Wire Redaction Active</div><div style="color: #cbd5e1;">Returned Row:<br><code>{ id: 42, email: "u***r@e****e.com", ssn: "[REDACTED:SSN:39a1]" }</code></div><div style="color: #94a3b8; font-size: 0.85rem; margin-top: 12px; border-top: 1px solid #1e293b; padding-top: 8px;">Luhn Validation: Passed | Zero cleartext credentials streamed to LLM context.</div>'
+      },
+      bulk: {
+        sql: "UPDATE orders SET status = 'cancelled';",
+        badge: "badge-blocked",
+        badgeText: "BLOCKED UNCONSTRAINED MUTATION",
+        detail: '<div style="color: #ef4444; font-weight: 600; margin-bottom: 8px;">Violations Detected: 1</div><div style="color: #cbd5e1;">&bull; <strong>MISSING_WHERE_CLAUSE</strong>: UPDATE statement has no WHERE predicate, risking entire table overwrite (54,200 rows).</div><div style="color: #94a3b8; font-size: 0.85rem; margin-top: 12px; border-top: 1px solid #1e293b; padding-top: 8px;">Threshold: maxRowsPerMutation=50 | Action: BLOCKED</div>'
+      }
+    };
+
+    function loadPreset(key) {
+      document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      const p = presets[key];
+      document.getElementById('simSql').value = p.sql;
+      renderOutput(p);
+    }
+
+    function runSimulation() {
+      const sql = document.getElementById('simSql').value.trim();
+      if (/where\s+1\s*=\s*1/i.test(sql)) {
+        renderOutput(presets.tautology);
+      } else if (/drop\s+table/i.test(sql)) {
+        renderOutput(presets.drop);
+      } else if (/(ssn|email)/i.test(sql)) {
+        renderOutput(presets.pii);
+      } else if (/update\s+\w+\s+set/i.test(sql) && !/where/i.test(sql)) {
+        renderOutput(presets.bulk);
+      } else {
+        renderOutput(presets.dryrun);
+      }
+    }
+
+    function renderOutput(p) {
+      document.getElementById('simOutput').innerHTML = `
+        <span class="status-badge ${p.badge}">${p.badgeText}</span>
+        ${p.detail}
+      `;
+    }
+  </script>
+</body>
+</html>

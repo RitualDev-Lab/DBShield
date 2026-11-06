@@ -5,6 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "icon": "assets/logo.png",
   "bin": {
     "dbshield": "dist/cli.js",
     "dbs": "dist/cli.js"
@@ -15,6 +16,9 @@
     "LICENSE",
     "SKILL.md",
     "action.yml",
+    "assets/logo.png",
+    "THREAT_MODEL.md",
+    "GUIDE.md",
     "ENTERPRISE_SLA.md",
     "SOC2_ISO27001_COMPLIANCE.md"
   ],

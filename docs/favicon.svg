@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="50%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#06b6d4" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Outer Shield -->
+  <path d="M32 4 L56 14 V30 C56 46 44 57 32 60 C20 57 8 46 8 30 V14 Z" 
+        fill="url(#shield-grad)" 
+        filter="url(#glow)" />
+
+  <!-- Inner Dark Core -->
+  <path d="M32 9 L51 17 V29 C51 42 41 52 32 55 C23 52 13 42 13 29 V17 Z" 
+        fill="#07090e" />
+
+  <!-- Database Stack Glyph -->
+  <!-- Top Disk -->
+  <ellipse cx="32" cy="24" rx="10" ry="3.5" fill="#38bdf8" />
+  <!-- Middle Tier -->
+  <path d="M22 24 V31 C22 33 26 34.5 32 34.5 C38 34.5 42 33 42 31 V24" fill="none" stroke="#38bdf8" stroke-width="1.8" />
+  <!-- Bottom Tier -->
+  <path d="M22 31 V38 C22 40 26 41.5 32 41.5 C38 41.5 42 40 42 38 V31" fill="none" stroke="#38bdf8" stroke-width="1.8" />
+  <circle cx="32" cy="38" r="2" fill="#22c55e" />
+</svg>
