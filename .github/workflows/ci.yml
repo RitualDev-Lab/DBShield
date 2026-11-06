@@ -59,5 +59,10 @@ jobs:
       - name: Run Test Suite
         run: pnpm test
 
+      - name: Test Python SDK
+        run: |
+          pip install pytest
+          pytest sdks/python/tests
+
       - name: Verify Tarball Packaging Gate
         run: npm pack --dry-run
