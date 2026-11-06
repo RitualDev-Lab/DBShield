@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 460" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="cyan-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <style>
+    .mono { font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; }
+    .title { fill: #9ca3af; font-size: 13px; font-weight: 500; }
+    .prompt { fill: #06b6d4; font-size: 13.5px; font-weight: 600; }
+    .cmd { fill: #38bdf8; font-size: 13.5px; font-weight: 600; }
+    .text-red { fill: #f87171; font-size: 13px; font-weight: bold; }
+    .text-yellow { fill: #fbbf24; font-size: 13px; }
+    .text-green { fill: #34d399; font-size: 13px; font-weight: 600; }
+    .text-purple { fill: #c084fc; font-size: 13px; font-weight: 600; }
+    .text-dim { fill: #6b7280; font-size: 12.5px; }
+    .text-white { fill: #f3f4f6; font-size: 13px; }
+    .cursor { animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  </style>
+
+  <!-- Window Container -->
+  <rect x="25" y="20" width="800" height="420" rx="12" fill="url(#bg-grad)" stroke="#1e293b" stroke-width="1.5" filter="url(#shadow)"/>
+
+  <!-- Top Window Header -->
+  <path d="M 25 32 Q 25 20 37 20 L 813 20 Q 825 20 825 32 L 825 58 L 25 58 Z" fill="#0f172a" />
+  <line x1="25" y1="58" x2="825" y2="58" stroke="#1e293b" stroke-width="1" />
+
+  <!-- Window Controls -->
+  <circle cx="50" cy="39" r="6" fill="#ef4444" />
+  <circle cx="70" cy="39" r="6" fill="#f59e0b" />
+  <circle cx="90" cy="39" r="6" fill="#10b981" />
+  <text x="425" y="44" text-anchor="middle" class="mono title">dbshield-proxy@localhost:5433 (PostgreSQL Protocol 3.0 Sandbox)</text>
+
+  <!-- Terminal Content Lines -->
+  <!-- Line 1: Agent tries catastrophic mutation -->
+  <text x="50" y="92" class="mono prompt">agent@cursor:~$</text>
+  <text x="180" y="92" class="mono cmd">psql -h 127.0.0.1 -p 5433 -c "DELETE FROM users WHERE 1=1;"</text>
+
+  <!-- Line 2: Intercept Alert -->
+  <text x="50" y="122" class="mono text-red">🚨 [DBShield AST Guardrail] Tautology &amp; Unconstrained Mutation Blocked!</text>
+  <text x="50" y="144" class="mono text-yellow">&gt; AST Analysis: Expression '1=1' evaluates to TRUE for all 428,190 records.</text>
+  <text x="50" y="166" class="mono text-dim">&gt; Policy [STRICT]: Destructive full-table mutation rejected in 0.38ms.</text>
+
+  <!-- Divider -->
+  <line x1="50" y1="188" x2="800" y2="188" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
+
+  <!-- Line 3: Two-Phase Dry Run Simulation -->
+  <text x="50" y="218" class="mono prompt">agent@claude:~$</text>
+  <text x="180" y="218" class="mono cmd">npx @ritualdev-lab/dbshield simulate "UPDATE orders SET status = 'archived' WHERE created_at &lt; NOW() - INTERVAL '90 days'"</text>
+
+  <!-- Line 4: Dry Run Output -->
+  <text x="50" y="248" class="mono text-purple">🧪 [DBShield Shadow DB] Two-Phase Rollback Simulation Succeeded</text>
+  <text x="50" y="270" class="mono text-white">&gt; Simulated Execution: BEGIN ... UPDATE ... ROLLBACK (Clean)</text>
+  <text x="50" y="292" class="mono text-green">&gt; Impact Preview: 1,420 rows affected | 0 lock escalations</text>
+  <text x="50" y="314" class="mono text-dim">&gt; Commit Token: 2pc_tok_9f81a7b3 (Expires in 300s, requires ChatOps approval)</text>
+
+  <!-- Divider -->
+  <line x1="50" y1="336" x2="800" y2="336" stroke="#1e293b" stroke-dasharray="4 4" stroke-width="1"/>
+
+  <!-- Line 5: Safe Query with PII Masking -->
+  <text x="50" y="366" class="mono prompt">agent@antigravity:~$</text>
+  <text x="215" y="366" class="mono cmd">psql -h 127.0.0.1 -p 5433 -c "SELECT id, email, ssn FROM users LIMIT 1;"</text>
+
+  <!-- Line 6: Masked Result -->
+  <text x="50" y="396" class="mono text-green">id: 42 | email: u***r@e****e.com | ssn: [REDACTED:SSN:39a1]</text>
+  <text x="50" y="418" class="mono text-dim">🛡️ In-Flight Wire Masking: Zero plaintext PII escaped to agent inference window. <tspan class="cursor" fill="#06b6d4">▋</tspan></text>
+</svg>

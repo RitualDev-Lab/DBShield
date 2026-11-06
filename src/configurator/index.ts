@@ -35,6 +35,15 @@ export function getCursorConfigPath(projectDir = process.cwd()): string {
   return path.join(projectDir, ".cursor", "mcp.json");
 }
 
+export function getAntigravityConfigPath(projectDir = process.cwd()): string {
+  return path.join(projectDir, ".antigravity", "mcp.json");
+}
+
+export function getWindsurfConfigPath(): string {
+  const homedir = os.homedir();
+  return path.join(homedir, ".codeium", "windsurf", "mcp_config.json");
+}
+
 export async function installClaude(customPath?: string): Promise<ConfiguratorResult> {
   const targetPath = customPath || getClaudeConfigPath();
   return await patchMcpConfigFile(targetPath);
@@ -42,6 +51,16 @@ export async function installClaude(customPath?: string): Promise<ConfiguratorRe
 
 export async function installCursor(projectDir = process.cwd()): Promise<ConfiguratorResult> {
   const targetPath = getCursorConfigPath(projectDir);
+  return await patchMcpConfigFile(targetPath);
+}
+
+export async function installAntigravity(projectDir = process.cwd()): Promise<ConfiguratorResult> {
+  const targetPath = getAntigravityConfigPath(projectDir);
+  return await patchMcpConfigFile(targetPath);
+}
+
+export async function installWindsurf(): Promise<ConfiguratorResult> {
+  const targetPath = getWindsurfConfigPath();
   return await patchMcpConfigFile(targetPath);
 }
 

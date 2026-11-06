@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>DBShield Releases &amp; Security Advisories</title>
+    <link>https://ritualdev.in/dbshield/</link>
+    <description>Safety-First Database Guardrail &amp; Sandboxing MCP Server for AI Coding Agents</description>
+    <language>en-us</language>
+    <lastBuildDate>Fri, 06 Nov 2026 12:00:00 +0000</lastBuildDate>
+    <atom:link href="https://ritualdev.in/dbshield/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>DBShield v0.2.0 Enterprise Release: PostgreSQL Protocol 3.0 Wire Proxy &amp; Two-Phase Dry-Run</title>
+      <link>https://github.com/RitualDev-Lab/DBShield/releases/tag/v0.2.0</link>
+      <description>Includes AST tautology detection, virtual schema masking, PII redactors, ChatOps Slack/Teams approvals, and sub-millisecond wire-level proxying.</description>
+      <pubDate>Fri, 06 Nov 2026 10:00:00 +0000</pubDate>
+      <guid>https://github.com/RitualDev-Lab/DBShield/releases/tag/v0.2.0</guid>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,123 @@
+# DBShield: Full Technical Context & MCP Specification for AI Agents
+Canonical URL: https://ritualdev.in/dbshield/
+Repository: https://github.com/RitualDev-Lab/DBShield
+Package: @ritualdev-lab/dbshield (v0.2.0)
+License: MIT
+Maintainer: RitualDev Lab (security@ritualdev.in)
+
+## Overview & Architecture
+DBShield is an open-source, safety-first database guardrail, virtual schema masking wire proxy, and Model Context Protocol (MCP) server. It prevents autonomous AI coding agents (Claude Code, Cursor, Windsurf, Google Antigravity, OpenAI Codex) from executing catastrophic DDL, performing unconstrained bulk mutations, or leaking customer PII into model context windows.
+
+DBShield operates with a zero-external-telemetry, 100% air-gapped local architecture complying with India's DPDP Act 2023, EU GDPR, and SOC 2 Type II controls.
+
+### Core Modules
+1. SQL AST-Level Guardrail Engine (`src/guard/`)
+   - Uses AST parsing via `node-sql-parser` to validate query structure before execution.
+   - Detects and intercepts tautologies (e.g., `WHERE 1=1`, `WHERE 'a'='a'`, `OR true`).
+   - Enforces explicit WHERE clauses on mutations (`UPDATE`, `DELETE`).
+   - Enforces row mutation thresholds (`maxRowsPerMutation`, default 50).
+   - Blocks destructive DDL (`DROP TABLE`, `DROP DATABASE`, `TRUNCATE`, `ALTER TABLE DROP COLUMN`) unless explicitly permitted.
+
+2. PostgreSQL Protocol 3.0 Wire Proxy (`src/proxy/`)
+   - High-throughput TCP proxy listening on port 5433 (or custom port).
+   - Direct drop-in for ORMs (Prisma, Drizzle, TypeORM, SQLAlchemy) and database clients (`psql`).
+   - Sub-millisecond latency overhead (< 0.42 ms vs native PostgreSQL).
+   - Transparent connection pooling (`src/proxy/connection-pool.ts`).
+   - Dynamic in-flight wire masking of PII in DataRow messages (`src/proxy/wire-masker.ts`).
+
+3. Two-Phase Distributed Dry-Run & Shadow Database (`src/sandbox/`)
+   - Phase 1 (Simulation): Executes mutations inside an isolated transaction rollback block (`BEGIN ... ROLLBACK`).
+   - Calculates affected row counts and AST mutation diffs without altering disk state.
+   - Issues a cryptographic two-phase commit token (`2pc_tok_...`) with a configurable TTL (default 300s).
+   - Phase 2 (Commit): Commits the mutation only when signed or approved via ChatOps / human approval.
+   - Multi-store distributed support across PostgreSQL, Redis, and SQLite (`src/sandbox/distributed.ts`).
+
+4. Virtual Schema Masking & Column-Level RBAC (`src/guard/virtual-schema.ts`)
+   - Intercepts catalog and introspection queries (`information_schema.tables`, `pg_catalog`).
+   - Filters out sensitive system tables (`credentials`, `sessions`, `api_keys`, `internal_audit`).
+   - Replaces column definitions for restricted fields with masked surrogate types.
+
+5. Dynamic Zero-Leak PII Redactor (`src/pii/`)
+   - Pattern matchers for SSNs, credit cards (Luhn-verified), email addresses, phone numbers, JWT tokens, AWS keys, Stripe tokens.
+   - Replaces cleartext PII with deterministic SHA-256 surrogate tokens (`[REDACTED:EMAIL:hash]`).
+
+6. ChatOps & Web Approval Feed (`src/approval/`, `src/dashboard/`)
+   - Webhook integrations for Slack and Microsoft Teams.
+   - Interactive live web dashboard on port 3100 streaming active queries, risk scores, and 1-click Approve/Reject actions.
+
+7. Missing Index & Query Plan Regressive Advisor (`src/explain/advisor.ts`)
+   - Parses EXPLAIN (FORMAT JSON) execution plans.
+   - Identifies sequential scans on large tables and recommends `CREATE INDEX CONCURRENTLY` DDL.
+
+8. Compliance Reporter (`src/compliance/reporter.ts`)
+   - Generates audit-ready reports in HTML, JSON, and PDF for SOC 2 Type II and ISO 27001.
+
+## MCP Tools Reference
+When running as an MCP server (`npx @ritualdev-lab/dbshield start`), DBShield provides the following tools:
+
+- `execute_query`:
+  Description: Safely executes a SQL query through DBShield guardrails with automatic PII masking and row limits.
+  Parameters:
+    - `query` (string, required): SQL query to execute.
+    - `dryRun` (boolean, optional): If true, simulates inside a transaction rollback block.
+    - `commitToken` (string, optional): Required to commit a previously simulated mutation.
+
+- `inspect_schema`:
+  Description: Safely inspects tables, columns, indexes, and foreign keys through virtual schema masking.
+  Parameters:
+    - `tableName` (string, optional): Specific table to inspect. If omitted, returns all permitted tables.
+
+- `simulate_mutation`:
+  Description: Two-phase dry-run simulation of an INSERT, UPDATE, or DELETE query.
+  Parameters:
+    - `query` (string, required): The mutation query to simulate.
+  Returns:
+    - `affectedRows`: Number of rows affected.
+    - `commitToken`: Cryptographic token required to execute the actual commit.
+    - `expiresAt`: ISO 8601 timestamp of token expiration.
+
+- `explain_query`:
+  Description: Evaluates query execution plan and provides index optimization advice.
+  Parameters:
+    - `query` (string, required): SQL query to explain.
+
+- `verify_compliance`:
+  Description: Audits current database security configuration against SOC 2 and ISO 27001 controls.
+  Parameters:
+    - `framework` (enum: ["soc2", "iso27001"]): Compliance standard to evaluate.
+
+## CLI Usage Reference
+- `dbshield start`: Launch MCP server on stdio transport.
+- `dbshield proxy [--port 5433] [--upstream-host 127.0.0.1] [--upstream-port 5432]`: Launch PostgreSQL wire proxy.
+- `dbshield dashboard [--port 3100]`: Launch query approval feed and web dashboard.
+- `dbshield report [--compliance soc2|iso27001] [--format html|pdf|json]`: Generate compliance audit report.
+- `dbshield status`: Check database connection and active safety parameters.
+- `dbshield init`: Generate starter `dbshield.config.json`.
+- `dbshield install-claude`: Auto-configure Claude Desktop (`claude_desktop_config.json`).
+- `dbshield install-cursor`: Auto-configure Cursor (`.cursor/mcp.json`).
+- `dbshield top`: Live ANSI terminal monitor of active agent sessions, proxy connections, and queries.
+- `dbshield audit`: Static analysis scanning migration files and schemas for hazards.
+
+## Configuration Schema (`dbshield.config.json`)
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/RitualDev-Lab/DBShield/main/schema.json",
+  "dialect": "postgres",
+  "storagePath": "./dev.db",
+  "upstreamHost": "127.0.0.1",
+  "upstreamPort": 5432,
+  "proxyPort": 5433,
+  "safetyTier": "BALANCED",
+  "maxRowsPerMutation": 50,
+  "allowDestructiveDDL": false,
+  "enablePiiMasking": true,
+  "enableCostGate": true,
+  "enableMigrationGate": true,
+  "enableSemanticGuard": true,
+  "enableMetrics": true,
+  "metricsPort": 9090,
+  "metricsHost": "0.0.0.0",
+  "customPiiColumns": ["ssn", "token", "secret_key", "password_hash"],
+  "maskedTables": ["credentials", "internal_audit", "admin_tokens"]
+}
+```

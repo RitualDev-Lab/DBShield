@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/logo.png" alt="DBShield Logo" width="130" />
+
 # 🛡️ DBShield
 
 **The Safety-First Database Guardrail & Sandboxing MCP Server for AI Coding Agents**
@@ -9,6 +11,8 @@
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/RitualDev-Lab/DBShield/badge)](https://securityscorecards.dev/viewer/?repo=github.com/RitualDev-Lab/DBShield)
 [![SOC 2 Audit Ready](https://img.shields.io/badge/SOC%202%20Type%20II-Audit%20Ready-10b981?logo=shield&logoColor=white)](https://ritualdev.in/trust)
 [![Website](https://img.shields.io/badge/Website-ritualdev.in%2Fdbshield-00F59B.svg)](https://ritualdev.in/dbshield)
+[![Documentation Guide](https://img.shields.io/badge/Docs-GUIDE.md-blue.svg)](./GUIDE.md)
+[![Threat Model](https://img.shields.io/badge/Security-THREAT__MODEL.md-red.svg)](./THREAT_MODEL.md)
 [![IDE Extension](https://img.shields.io/badge/Open_VSX-Ritual_Agent_Defense-blue.svg)](https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense)
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-8A2BE2.svg)](https://modelcontextprotocol.io/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue)](https://www.typescriptlang.org/)
@@ -22,6 +26,12 @@
 *Protect your databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.*
 
 </div>
+
+---
+
+<p align="center">
+  <img src="docs/terminal-demo.svg" alt="DBShield Terminal Interactive Demo" width="100%" />
+</p>
 
 ---
 
