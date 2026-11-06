@@ -2,6 +2,10 @@ name: "DBShield Database Guardrail Gate"
 description: "Safety-First Database Guardrail & Migration Audit Gate for Pull Requests and Autonomous AI Agents"
 author: "RitualDev Lab"
 
+branding:
+  icon: "database"
+  color: "blue"
+
 inputs:
   dialect:
     description: "Database dialect (postgres, sqlite, mysql)"
@@ -28,10 +32,19 @@ inputs:
     required: false
     default: ".dbshield.sarif"
 
+outputs:
+  status:
+    description: "Audit outcome status (passed or failed)"
+    value: ${{ steps.audit.outputs.status }}
+  violations_count:
+    description: "Total destructive or unindexed violations detected"
+    value: ${{ steps.audit.outputs.violations_count }}
+
 runs:
   using: "composite"
   steps:
     - name: Run DBShield Database Guardrail Audit
+      id: audit
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github_token || github.token }}
@@ -47,6 +60,14 @@ runs:
           node "$ACTION_PATH/dist/cli.js" status --dialect "$INPUT_DIALECT" --tier "$INPUT_TIER" || EXIT_CODE=$?
         else
           (cd "$ACTION_PATH" && npm install --silent && npm run build --silent && node dist/cli.js status --dialect "$INPUT_DIALECT") || EXIT_CODE=$?
+        fi
+
+        if [ "$EXIT_CODE" -eq 0 ]; then
+          echo "status=passed" >> "$GITHUB_OUTPUT"
+          echo "violations_count=0" >> "$GITHUB_OUTPUT"
+        else
+          echo "status=failed" >> "$GITHUB_OUTPUT"
+          echo "violations_count=1" >> "$GITHUB_OUTPUT"
         fi
 
         if [ "$INPUT_FAIL_ON_VIOLATION" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
