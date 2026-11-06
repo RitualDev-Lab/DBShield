@@ -62,7 +62,8 @@ jobs:
       - name: Test Python SDK
         run: |
           pip install pytest
-          pytest sdks/python/tests
+          pip install -e sdks/python
+          python -m pytest sdks/python/tests
 
       - name: Verify Tarball Packaging Gate
         run: npm pack --dry-run
