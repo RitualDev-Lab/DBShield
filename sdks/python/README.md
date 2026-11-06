@@ -9,8 +9,10 @@ Protect your databases from accidental bulk deletes, catastrophic drops, locks, 
 ## 📦 Installation
 
 ```bash
-pip install dbshield
+pip install dbshield-defense
 ```
+
+*(In Python code, import as standard `import dbshield` or `from dbshield import DBShieldGuard`)*
 
 ---
 
