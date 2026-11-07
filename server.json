@@ -31,13 +31,6 @@
           "required": false
         }
       ]
-    },
-    {
-      "registryType": "oci",
-      "identifier": "ghcr.io/ritualdev-lab/dbshield:v0.2.1",
-      "transport": {
-        "type": "stdio"
-      }
     }
   ]
 }
