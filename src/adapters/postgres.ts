@@ -50,12 +50,30 @@ export class PostgresAdapter implements DatabaseAdapter {
     this.statementTimeoutMs = statementTimeoutMs;
 
     if (typeof connection === "string") {
-      const isCloud =
-        connection.includes("sslmode=require") ||
-        connection.includes("neon.tech") ||
-        connection.includes("supabase.co") ||
-        connection.includes("render.com") ||
-        connection.includes("amazonaws.com");
+      let isCloud = false;
+      try {
+        const parsed = new URL(connection);
+        const hostname = parsed.hostname.toLowerCase();
+        const searchParams = parsed.searchParams;
+        const isCloudHost =
+          hostname === "neon.tech" ||
+          hostname.endsWith(".neon.tech") ||
+          hostname === "supabase.co" ||
+          hostname.endsWith(".supabase.co") ||
+          hostname === "render.com" ||
+          hostname.endsWith(".render.com") ||
+          hostname === "amazonaws.com" ||
+          hostname.endsWith(".amazonaws.com");
+        const hasSslMode =
+          searchParams.get("sslmode") === "require" || parsed.search.includes("sslmode=require");
+        isCloud = isCloudHost || hasSslMode;
+      } catch {
+        isCloud =
+          /sslmode=require/i.test(connection) ||
+          /@([a-zA-Z0-9.-]+\.)?(neon\.tech|supabase\.co|render\.com|amazonaws\.com)([:/]|$)/i.test(
+            connection,
+          );
+      }
 
       this.config = {
         connectionString: connection,

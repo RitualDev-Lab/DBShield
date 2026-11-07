@@ -211,23 +211,23 @@ test("CostGateEngine - Allows indexed query with low cost without warnings", asy
 });
 
 test("Runaway Query Killer - Statement timeout terminates slow queries in SqliteAdapter with [QUERY_TIMEOUT_EXCEEDED]", async () => {
-  // Use a very short timeout of 20ms and an iterative recursive table that generates large rows
-  const sqliteAdapter = new SqliteAdapter(":memory:", 5000, 50, 20);
+  // Use a very short timeout of 10ms and an iterative recursive table that generates large rows
+  const sqliteAdapter = new SqliteAdapter(":memory:", 500000, 50, 10);
   await sqliteAdapter.connect();
 
   await assert.rejects(async () => {
-    // Generate a long loop in SQLite that takes > 20ms
+    // Generate a long loop in SQLite that takes > 10ms
     await sqliteAdapter.query(
       `WITH RECURSIVE cnt(x) AS (
         SELECT 1
         UNION ALL
         SELECT x+1 FROM cnt WHERE x < 2000000
       )
-      SELECT x, hex(randomblob(1000)) FROM cnt;`,
+      SELECT x, hex(randomblob(10000)) FROM cnt;`,
       [],
-      { timeoutMs: 20 },
+      { timeoutMs: 10, maxRows: 500000 },
     );
-  }, /\[QUERY_TIMEOUT_EXCEEDED\] Query execution exceeded the hard limit of 20ms and was terminated to protect database stability/);
+  }, /\[QUERY_TIMEOUT_EXCEEDED\] Query execution exceeded the hard limit of 10ms and was terminated to protect database stability/);
 
   await sqliteAdapter.disconnect();
 });

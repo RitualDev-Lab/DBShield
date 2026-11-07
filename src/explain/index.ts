@@ -12,7 +12,10 @@ export class QueryExplainer {
   }
 
   public async explainQuery(sql: string, params: unknown[] = []): Promise<ExplainReport> {
-    const trimmed = sql.trim().replace(/;+$/, "");
+    let trimmed = sql.trim();
+    while (trimmed.endsWith(";")) {
+      trimmed = trimmed.slice(0, -1).trimEnd();
+    }
     const isPostgres = this.adapter.dialect === "postgres";
     const explainSql = isPostgres ? `EXPLAIN ${trimmed};` : `EXPLAIN QUERY PLAN ${trimmed};`;
 

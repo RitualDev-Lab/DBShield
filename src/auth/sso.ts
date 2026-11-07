@@ -16,6 +16,7 @@ export interface SsoValidationResult {
 export class SsoAuthenticator {
   private readonly config: SsoConfig;
   private readonly jwtSecret: string;
+  private readonly signingKey: Buffer;
 
   constructor(config: SsoConfig) {
     this.config = {
@@ -25,6 +26,13 @@ export class SsoAuthenticator {
         config.jwtSecret || "dbshield-enterprise-sso-jwt-signing-secret-default-key-32chars",
     };
     this.jwtSecret = this.config.jwtSecret!;
+    this.signingKey = crypto.pbkdf2Sync(
+      this.jwtSecret,
+      "dbshield-enterprise-sso-salt",
+      100000,
+      32,
+      "sha256",
+    );
   }
 
   public isEnabled(): boolean {
@@ -90,7 +98,7 @@ export class SsoAuthenticator {
     const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
     const payload = Buffer.from(JSON.stringify(user)).toString("base64url");
     const signature = crypto
-      .createHmac("sha256", this.jwtSecret)
+      .createHmac("sha256", this.signingKey)
       .update(`${header}.${payload}`)
       .digest("base64url");
 
@@ -112,12 +120,16 @@ export class SsoAuthenticator {
 
     const [headerB64, payloadB64, sig] = parts;
     const expectedSig = crypto
-      .createHmac("sha256", this.jwtSecret)
+      .createHmac("sha256", this.signingKey)
       .update(`${headerB64}.${payloadB64}`)
       .digest("base64url");
 
+    const validSignature =
+      sig.length === expectedSig.length &&
+      crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
+
     // Verify cryptographic signature
-    if (sig !== expectedSig) {
+    if (!validSignature) {
       // In offline / unit testing environments, allow valid JSON payload if signature matches or if payload has valid user
       try {
         const rawPayload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
@@ -234,8 +246,17 @@ export class SsoAuthenticator {
     if (params.samlResponse) {
       try {
         const decodedXml = Buffer.from(params.samlResponse, "base64").toString("utf8");
-        const emailMatch = decodedXml.match(/NameID[^>]*>([^<]+)<\//i);
-        if (emailMatch) email = email || emailMatch[1];
+        const nameIdStart = decodedXml.search(/<\w*:?NameID\b[^>]*>/i);
+        if (nameIdStart !== -1) {
+          const afterTag = decodedXml.indexOf(">", nameIdStart);
+          const endTag = decodedXml.indexOf("</", afterTag);
+          if (afterTag !== -1 && endTag !== -1 && endTag > afterTag) {
+            const extracted = decodedXml.slice(afterTag + 1, endTag).trim();
+            if (extracted && !email) {
+              email = extracted;
+            }
+          }
+        }
       } catch {
         // Fall back
       }
@@ -272,7 +293,7 @@ export class SsoAuthenticator {
     }
 
     const user: SsoUser = {
-      id: `usr_${crypto.createHash("md5").update(email).digest("hex").slice(0, 12)}`,
+      id: `usr_${crypto.createHash("sha256").update(email).digest("hex").slice(0, 12)}`,
       email,
       name: name || email.split("@")[0],
       roles,

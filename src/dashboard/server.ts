@@ -7,6 +7,15 @@ import { SsoAuthenticator } from "../auth/sso.js";
 import { ComplianceReporter } from "../compliance/reporter.js";
 import type { DBShieldConfig, SsoUser } from "../types/index.js";
 
+function escapeServerHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export class DashboardServer {
   private server: http.Server | null = null;
   private readonly config: DBShieldConfig;
@@ -230,13 +239,13 @@ export class DashboardServer {
       if (!callbackResult.success || !callbackResult.sessionToken) {
         res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
         res.end(
-          `<h1>SSO Authentication Failed</h1><p>${callbackResult.error || "Unknown error"}</p><a href="/auth/login">Try again</a>`,
+          `<h1>SSO Authentication Failed</h1><p>${escapeServerHtml(callbackResult.error || "Unknown error")}</p><a href="/auth/login">Try again</a>`,
         );
         return;
       }
 
       res.writeHead(302, {
-        "Set-Cookie": `dbshield_session=${callbackResult.sessionToken}; Path=/; HttpOnly; SameSite=Lax`,
+        "Set-Cookie": `dbshield_session=${callbackResult.sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax`,
         Location: "/",
       });
       res.end();
@@ -254,7 +263,8 @@ export class DashboardServer {
     // SSO: Logout
     if (pathname === "/auth/logout") {
       res.writeHead(302, {
-        "Set-Cookie": "dbshield_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        "Set-Cookie":
+          "dbshield_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax",
         Location: "/",
       });
       res.end();
@@ -429,7 +439,7 @@ export class DashboardServer {
     }
 
     // Approve endpoint
-    const approveMatch = pathname.match(/^\/api\/approvals\/([^/]+)\/approve$/);
+    const approveMatch = pathname.match(/^\/api\/approvals\/(appr_[a-f0-9]{12})\/approve$/);
     if (approveMatch && method === "POST") {
       const id = approveMatch[1];
       const success = this.approvalQueue.approve(id, auth.user?.email || "developer");
@@ -439,7 +449,7 @@ export class DashboardServer {
     }
 
     // Reject endpoint
-    const rejectMatch = pathname.match(/^\/api\/approvals\/([^/]+)\/reject$/);
+    const rejectMatch = pathname.match(/^\/api\/approvals\/(appr_[a-f0-9]{12})\/reject$/);
     if (rejectMatch && method === "POST") {
       const id = rejectMatch[1];
       let body = "";
