@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.ritualdev-lab/dbshield",
   "title": "DBShield Database Guardrail & Sandboxing MCP Server",
-  "description": "Safety-first Database Guardrail, AST SQL Validator, PII Masker, and Copy-on-Write Sandbox for AI Coding Agents (Cursor, Claude Desktop, Antigravity, Windsurf)",
+  "description": "Safety-first Database Guardrail & Sandboxing MCP Server for AI Coding Agents",
   "version": "0.2.1",
   "status": "active",
   "repository": {
