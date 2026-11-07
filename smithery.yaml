@@ -1,0 +1,34 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      dialect:
+        type: string
+        enum: ["postgres", "mysql", "sqlite"]
+        default: "sqlite"
+        title: "Database Dialect"
+        description: "Target database dialect to sandbox and validate"
+      connectionString:
+        type: string
+        title: "Connection String / Database URL"
+        description: "Connection string or SQLite file path (e.g. postgres://user:pass@localhost:5432/mydb)"
+      safetyTier:
+        type: string
+        enum: ["STRICT", "PERMISSIVE", "READ_ONLY"]
+        default: "STRICT"
+        title: "Safety Tier"
+        description: "Guardrail enforcement level"
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', '@ritualdev-lab/dbshield', 'start'],
+      env: {
+        DBSHIELD_DIALECT: config.dialect || 'sqlite',
+        DBSHIELD_DB_URL: config.connectionString || '',
+        DBSHIELD_TIER: config.safetyTier || 'STRICT'
+      }
+    })
+  exampleConfig:
+    dialect: "sqlite"
+    safetyTier: "STRICT"
