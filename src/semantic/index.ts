@@ -346,28 +346,39 @@ export class SemanticIntentGuard {
       // Fallback to robust regex parsing if AST parser encounters non-standard dialect syntax
     }
 
-    // Regex fallback if AST returned 0 columns
+    // Fallback if AST returned 0 columns
     if (columns.size === 0) {
       const upper = sql.toUpperCase();
       if (upper.includes("UPDATE ") && upper.includes(" SET ")) {
-        const setMatch = sql.match(/SET\s+([\s\S]+?)(?:\s+WHERE|\s+ORDER|\s+LIMIT|;|\s*$)/i);
-        if (setMatch) {
-          const setClause = setMatch[1];
+        const setIdx = sql.search(/\bSET\b/i);
+        if (setIdx !== -1) {
+          const afterSet = sql.slice(setIdx + 3);
+          const endMatch = afterSet.match(/\b(WHERE|ORDER|LIMIT)\b|;/i);
+          const setClause =
+            endMatch && endMatch.index !== undefined ? afterSet.slice(0, endMatch.index) : afterSet;
           const assignments = setClause.split(",");
           for (const assign of assignments) {
-            const colMatch = assign.match(/([a-zA-Z0-9_]+)\s*=/);
-            if (colMatch) {
-              columns.add(colMatch[1].toLowerCase());
+            const eqIdx = assign.indexOf("=");
+            if (eqIdx !== -1) {
+              const left = assign.slice(0, eqIdx).trim();
+              const colMatch = left.match(/([a-zA-Z0-9_]+)$/);
+              if (colMatch) {
+                columns.add(colMatch[1].toLowerCase());
+              }
             }
           }
         }
       } else if (upper.includes("INSERT INTO")) {
-        const insertMatch = sql.match(/INSERT\s+INTO\s+[a-zA-Z0-9_."`]+\s*\(([^)]+)\)/i);
-        if (insertMatch) {
-          const colList = insertMatch[1].split(",");
-          for (const c of colList) {
-            const clean = c.trim().replace(/["`]/g, "").toLowerCase();
-            if (clean) columns.add(clean);
+        const insertIdx = sql.search(/\bINSERT\s+INTO\b/i);
+        if (insertIdx !== -1) {
+          const firstParen = sql.indexOf("(", insertIdx);
+          const closeParen = firstParen !== -1 ? sql.indexOf(")", firstParen) : -1;
+          if (firstParen !== -1 && closeParen !== -1 && closeParen > firstParen) {
+            const colList = sql.slice(firstParen + 1, closeParen).split(",");
+            for (const c of colList) {
+              const clean = c.trim().replace(/["`]/g, "").toLowerCase();
+              if (clean) columns.add(clean);
+            }
           }
         }
       }

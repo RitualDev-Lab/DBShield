@@ -10,6 +10,16 @@ import type {
   DBShieldConfig,
 } from "../types/index.js";
 
+function escapeReportHtml(str: unknown): string {
+  if (typeof str !== "string") return String(str ?? "");
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export class ComplianceReporter {
   private readonly config: DBShieldConfig;
   private readonly auditLogger?: AuditLogger;
@@ -257,24 +267,35 @@ export class ComplianceReporter {
       .map(
         (p) => `
       <tr>
-        <td style="font-weight: 600; font-family: monospace;">${p.controlId}</td>
-        <td><strong>${p.controlTitle}</strong><br><span style="color: #64748b; font-size: 13px;">${p.description}</span></td>
+        <td style="font-weight: 600; font-family: monospace;">${escapeReportHtml(p.controlId)}</td>
+        <td><strong>${escapeReportHtml(p.controlTitle)}</strong><br><span style="color: #64748b; font-size: 13px;">${escapeReportHtml(p.description)}</span></td>
         <td>
           <span style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: ${
             p.status === "COMPLIANT" ? "#dcfce7; color: #15803d" : "#fef3c7; color: #b45309"
           };">
-            ${p.status}
+            ${escapeReportHtml(p.status)}
           </span>
         </td>
       </tr>`,
       )
       .join("");
 
+    const safeFramework = escapeReportHtml(report.framework.toUpperCase());
+    const safeCompany = escapeReportHtml(company);
+    const safeEnv = escapeReportHtml(env);
+    const safeGeneratedAt = escapeReportHtml(report.generatedAt);
+    const safeReportId = escapeReportHtml(report.reportId);
+    const safeStatus = escapeReportHtml(report.status);
+    const safeScore = escapeReportHtml(report.score);
+    const safeHeadHash = escapeReportHtml(logVerification.headHash);
+    const safeTailHash = escapeReportHtml(logVerification.tailHash);
+    const safeSig = escapeReportHtml(report.auditorSignature);
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>DBShield Compliance Audit Report - ${report.framework.toUpperCase()}</title>
+  <title>DBShield Compliance Audit Report - ${safeFramework}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 40px; color: #0f172a; background: #fff; }
     .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 24px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
@@ -294,17 +315,17 @@ export class ComplianceReporter {
 <body>
   <div class="header">
     <div>
-      <h1 style="margin: 0; font-size: 26px;">🛡️ DBShield ${report.framework.toUpperCase()} Compliance Audit</h1>
+      <h1 style="margin: 0; font-size: 26px;">🛡️ DBShield ${safeFramework} Compliance Audit</h1>
       <p style="margin: 6px 0 0; color: #64748b;">Automated Security, Data Privacy & Cryptographic Integrity Verification</p>
     </div>
-    <div class="badge">${report.status}: ${report.score}% COMPLIANT</div>
+    <div class="badge">${safeStatus}: ${safeScore}% COMPLIANT</div>
   </div>
 
   <div class="meta-grid">
-    <div class="meta-item"><div class="label">Organization</div><div class="val">${company}</div></div>
-    <div class="meta-item"><div class="label">Environment</div><div class="val">${env}</div></div>
-    <div class="meta-item"><div class="label">Generated At</div><div class="val">${report.generatedAt}</div></div>
-    <div class="meta-item"><div class="label">Report ID</div><div class="val" style="font-family: monospace;">${report.reportId}</div></div>
+    <div class="meta-item"><div class="label">Organization</div><div class="val">${safeCompany}</div></div>
+    <div class="meta-item"><div class="label">Environment</div><div class="val">${safeEnv}</div></div>
+    <div class="meta-item"><div class="label">Generated At</div><div class="val">${safeGeneratedAt}</div></div>
+    <div class="meta-item"><div class="label">Report ID</div><div class="val" style="font-family: monospace;">${safeReportId}</div></div>
   </div>
 
   <h2>Trust Services Criteria & Controls</h2>
@@ -325,9 +346,9 @@ export class ComplianceReporter {
   <div class="proof-box">
 <div><strong>Chain Verification:</strong> ${logVerification.valid ? "PASSED (No tampering detected)" : "FAILED"}</div>
 <div><strong>Total Audit Entries Verified:</strong> ${logVerification.totalVerified}</div>
-<div><strong>Chain Head Hash:</strong> ${logVerification.headHash}</div>
-<div><strong>Chain Tail Hash:</strong> ${logVerification.tailHash}</div>
-<div><strong>Auditor Digital Seal (HMAC-SHA256):</strong> ${report.auditorSignature}</div>
+<div><strong>Chain Head Hash:</strong> ${safeHeadHash}</div>
+<div><strong>Chain Tail Hash:</strong> ${safeTailHash}</div>
+<div><strong>Auditor Digital Seal (HMAC-SHA256):</strong> ${safeSig}</div>
   </div>
 
   <div class="signature">

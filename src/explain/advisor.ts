@@ -59,19 +59,23 @@ export class QueryPlanAdvisor {
       // Fallback to regex
     }
 
-    // 2. Regex fallback if AST returned empty
+    // 2. Fallback if AST returned empty
     if (columns.size === 0) {
       const stripped = stripSqlComments(sql);
 
-      // Match WHERE clause
-      const whereMatch = stripped.match(
-        /WHERE\s+([\s\S]+?)(?:\s+ORDER\s+BY|\s+GROUP\s+BY|\s+LIMIT|;|\s*$)/i,
-      );
-      if (whereMatch) {
-        const whereText = whereMatch[1];
-        // Match table.column or bare column = / IN / LIKE / > / <
+      // Extract WHERE clause using linear index search to eliminate ReDoS
+      const whereIdx = stripped.search(/\bWHERE\b/i);
+      if (whereIdx !== -1) {
+        const afterWhere = stripped.slice(whereIdx + 5);
+        const endMatch = afterWhere.match(/\b(ORDER\s+BY|GROUP\s+BY|LIMIT)\b|;/i);
+        const whereText =
+          endMatch && endMatch.index !== undefined
+            ? afterWhere.slice(0, endMatch.index)
+            : afterWhere;
+
+        // Match table.column or bare column with comparison operators
         const predMatches = whereText.matchAll(
-          /(?:([a-zA-Z0-9_]+)\.)?([a-zA-Z0-9_]+)\s*(?:=|!=|<>|<|>|<=|>=|IN|LIKE|ILIKE|BETWEEN|IS)\s*/gi,
+          /\b(?:([a-zA-Z0-9_]+)\.)?([a-zA-Z0-9_]+)\s*(=|!=|<>|<=|>=|<|>|\bIN\b|\bLIKE\b|\bILIKE\b|\bBETWEEN\b|\bIS\b)/gi,
         );
         for (const pm of predMatches) {
           const tablePrefix = pm[1]?.toLowerCase();

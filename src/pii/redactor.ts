@@ -357,12 +357,19 @@ function getColumnRule(
 }
 
 function redactInsertValues(sql: string, customCols: Set<string>): string {
-  const insertPattern = /\bINSERT\s+INTO\s+[^(]+\(([^)]+)\)\s*VALUES\s*([\s\S]+)$/i;
-  const match = sql.match(insertPattern);
-  if (!match) return sql;
+  const insertIdx = sql.search(/\bINSERT\s+INTO\b/i);
+  if (insertIdx === -1) return sql;
 
-  const colsPart = match[1];
-  const valuesPart = match[2];
+  const valuesIdx = sql.search(/\bVALUES\b/i);
+  if (valuesIdx === -1 || valuesIdx <= insertIdx) return sql;
+
+  const firstParen = sql.indexOf("(", insertIdx);
+  if (firstParen === -1 || firstParen > valuesIdx) return sql;
+
+  const closeParen = sql.lastIndexOf(")", valuesIdx);
+  if (closeParen === -1 || closeParen <= firstParen) return sql;
+
+  const colsPart = sql.slice(firstParen + 1, closeParen);
   const columns = splitSqlTuples(colsPart);
 
   const redactionMaskFnsByIndex = new Map<number, (val: string) => string>();
@@ -377,19 +384,53 @@ function redactInsertValues(sql: string, customCols: Set<string>): string {
     return sql;
   }
 
-  const tuplePattern = /\(([^)]+)\)/g;
-  const newValuesPart = valuesPart.replace(tuplePattern, (_tupleMatch, innerTuple) => {
-    const values = splitSqlTuples(innerTuple);
-    const maskedValues = values.map((val, idx) => {
-      const maskFn = redactionMaskFnsByIndex.get(idx);
-      if (maskFn) {
-        const cleanVal = val.replace(/^['"]|['"]$/g, "");
-        return `'${maskFn(cleanVal)}'`;
-      }
-      return val;
-    });
-    return `(${maskedValues.join(", ")})`;
-  });
+  const valuesKeywordLen = 6;
+  const valuesStart = valuesIdx + valuesKeywordLen;
+  const valuesPart = sql.slice(valuesStart);
 
-  return sql.slice(0, match.index! + match[0].length - valuesPart.length) + newValuesPart;
+  let result = "";
+  let inParen = false;
+  let inQuote: string | null = null;
+  let currentTuple = "";
+
+  for (let i = 0; i < valuesPart.length; i++) {
+    const char = valuesPart[i];
+    if (inQuote) {
+      if (char === inQuote) {
+        if (i + 1 < valuesPart.length && valuesPart[i + 1] === inQuote) {
+          currentTuple += char + inQuote;
+          i++;
+        } else {
+          inQuote = null;
+          currentTuple += char;
+        }
+      } else {
+        currentTuple += char;
+      }
+    } else if (char === "'" || char === '"') {
+      inQuote = char;
+      currentTuple += char;
+    } else if (char === "(" && !inParen) {
+      inParen = true;
+      currentTuple = "";
+    } else if (char === ")" && inParen) {
+      inParen = false;
+      const values = splitSqlTuples(currentTuple);
+      const maskedValues = values.map((val, idx) => {
+        const maskFn = redactionMaskFnsByIndex.get(idx);
+        if (maskFn) {
+          const cleanVal = val.replace(/^['"]|['"]$/g, "");
+          return `'${maskFn(cleanVal)}'`;
+        }
+        return val;
+      });
+      result += `(${maskedValues.join(", ")})`;
+    } else if (inParen) {
+      currentTuple += char;
+    } else {
+      result += char;
+    }
+  }
+
+  return sql.slice(0, valuesStart) + (result || valuesPart);
 }

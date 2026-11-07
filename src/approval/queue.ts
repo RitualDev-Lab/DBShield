@@ -45,6 +45,10 @@ export class ApprovalQueue {
    * Approve a pending mutation query.
    */
   public approve(id: string, reviewer = "Developer (Dashboard)"): boolean {
+    if (typeof id !== "string" || !/^appr_[a-f0-9]{12}$/.test(id)) {
+      return false;
+    }
+
     const req = this.requests.get(id);
     if (!req || req.status !== "PENDING") {
       return false;
@@ -54,10 +58,13 @@ export class ApprovalQueue {
     req.decidedAt = new Date().toISOString();
     req.decidedBy = reviewer;
 
-    const resolver = this.resolvers.get(id);
-    if (resolver) {
-      resolver("APPROVED");
+    const activeResolvers = Array.from(this.resolvers.keys());
+    if (activeResolvers.includes(id)) {
+      const resolver = this.resolvers.get(id);
       this.resolvers.delete(id);
+      if (typeof resolver === "function") {
+        resolver("APPROVED");
+      }
     }
 
     this.notifyListeners(req);
@@ -68,6 +75,10 @@ export class ApprovalQueue {
    * Reject a pending mutation query.
    */
   public reject(id: string, reviewer = "Developer (Dashboard)", reason?: string): boolean {
+    if (typeof id !== "string" || !/^appr_[a-f0-9]{12}$/.test(id)) {
+      return false;
+    }
+
     const req = this.requests.get(id);
     if (!req || req.status !== "PENDING") {
       return false;
@@ -78,10 +89,13 @@ export class ApprovalQueue {
     req.decidedBy = reviewer;
     req.reason = reason || "Rejected by developer in live approval feed";
 
-    const resolver = this.resolvers.get(id);
-    if (resolver) {
-      resolver("REJECTED");
+    const activeResolvers = Array.from(this.resolvers.keys());
+    if (activeResolvers.includes(id)) {
+      const resolver = this.resolvers.get(id);
       this.resolvers.delete(id);
+      if (typeof resolver === "function") {
+        resolver("REJECTED");
+      }
     }
 
     this.notifyListeners(req);

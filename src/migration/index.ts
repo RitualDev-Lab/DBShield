@@ -114,10 +114,8 @@ export class MigrationSafetyEngine {
     if (upper.includes("ALTER TABLE") && upper.includes("ADD ") && upper.includes("NOT NULL")) {
       const hasDefault = upper.includes("DEFAULT");
       if (!hasDefault) {
-        const tableMatch = sql.match(/ALTER\s+TABLE\s+(?:ONLY\s+)?([a-zA-Z0-9_."]+)/i);
-        const colMatch = sql.match(
-          /ADD\s+(?:COLUMN\s+)?([a-zA-Z0-9_."]+)\s+[^,;]+?\bNOT\s+NULL\b/i,
-        );
+        const tableMatch = sql.match(/\bALTER\s+TABLE\s+(?:ONLY\s+)?([a-zA-Z0-9_."]+)/i);
+        const colMatch = sql.match(/\bADD\s+(?:COLUMN\s+)?([a-zA-Z0-9_."]+)/i);
         const table = tableMatch ? tableMatch[1].replace(/["`]/g, "") : "target_table";
         const column = colMatch ? colMatch[1].replace(/["`]/g, "") : "new_column";
 

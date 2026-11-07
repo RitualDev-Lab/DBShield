@@ -43,7 +43,8 @@ test("SSO Authenticator - Generates IdP Authorization URLs", () => {
     assert.ok(authUrl.length > 20);
 
     if (provider === "google") {
-      assert.ok(authUrl.includes("accounts.google.com"));
+      const parsedUrl = new URL(authUrl);
+      assert.strictEqual(parsedUrl.hostname, "accounts.google.com");
     } else if (provider === "azure-ad") {
       assert.ok(authUrl.includes("oauth2/v2.0/authorize"));
     } else if (provider === "okta") {
