@@ -92,21 +92,22 @@ export class SsoAuthenticator {
   }
 
   /**
-   * Creates an HMAC-SHA256 signed session JWT.
+   * Creates a cryptographically signed session JWT using PBKDF2 key derivation.
    */
   public createSessionToken(user: SsoUser): string {
-    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const header = Buffer.from(JSON.stringify({ alg: "PBKDF2-SHA256", typ: "JWT" })).toString(
+      "base64url",
+    );
     const payload = Buffer.from(JSON.stringify(user)).toString("base64url");
     const signature = crypto
-      .createHmac("sha256", this.signingKey)
-      .update(`${header}.${payload}`)
-      .digest("base64url");
+      .pbkdf2Sync(`${header}.${payload}`, this.signingKey, 10000, 32, "sha256")
+      .toString("base64url");
 
     return `${header}.${payload}.${signature}`;
   }
 
   /**
-   * Verifies an HMAC-SHA256 signed session JWT or provider ID token.
+   * Verifies an HMAC/PBKDF2 signed session JWT or provider ID token.
    */
   public verifySessionToken(token: string): SsoValidationResult {
     if (!token || typeof token !== "string") {
@@ -120,9 +121,8 @@ export class SsoAuthenticator {
 
     const [headerB64, payloadB64, sig] = parts;
     const expectedSig = crypto
-      .createHmac("sha256", this.signingKey)
-      .update(`${headerB64}.${payloadB64}`)
-      .digest("base64url");
+      .pbkdf2Sync(`${headerB64}.${payloadB64}`, this.signingKey, 10000, 32, "sha256")
+      .toString("base64url");
 
     const validSignature =
       sig.length === expectedSig.length &&
