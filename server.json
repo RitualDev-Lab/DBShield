@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.ritualdev-lab/dbshield",
+  "name": "io.github.RitualDev-Lab/dbshield",
   "title": "DBShield Database Guardrail & Sandboxing MCP Server",
   "description": "Safety-first Database Guardrail & Sandboxing MCP Server for AI Coding Agents",
   "version": "0.2.1",
