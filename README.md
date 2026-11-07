@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="assets/logo.png" alt="DBShield Logo" width="130" />
 
@@ -17,6 +17,7 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-8A2BE2.svg)](https://modelcontextprotocol.io/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0-green.svg)](https://nodejs.org/)
+[![Sponsor on Dodo Payments](https://img.shields.io/badge/Sponsor-Dodo%20Payments-8b5cf6?style=for-the-badge&logo=shield&logoColor=white)](https://checkout.dodopayments.com/buy/pdt_0NpjONGugY5QkrFDUaPva)
 [![CI](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml/badge.svg)](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml)
 [![Docker Image](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
 [![Helm Chart](https://img.shields.io/badge/Helm-v0.2.0-0F1689.svg?logo=helm&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
@@ -330,6 +331,26 @@ DBShield provides deterministic, zero-data-custody database protection backed by
 * **Trust & Security Portal**: [https://ritualdev.in/trust](https://ritualdev.in/trust)
 
 ---
+
+---
+
+## 💖 Sponsor & Support via Dodo Payments
+
+DBShield is 100% open-source and MIT-licensed. Your sponsorship directly finances our multi-database regression testing infrastructure (PostgreSQL, MySQL, SQLite, MongoDB), automated benchmark CI runners, and high-availability MCP registry telemetry.
+
+<div align="center">
+
+[![Sponsor on Dodo Payments](https://img.shields.io/badge/Sponsor_via_Dodo-Payments-8b5cf6?style=for-the-badge&logo=shield&logoColor=white)](https://checkout.dodopayments.com/buy/pdt_0NpjONGugY5QkrFDUaPva)
+[![Interactive Donation Portal](https://img.shields.io/badge/Donation_Portal-Cards%20%7C%20UPI%20%7C%20Apple%20Pay-ff5964?style=for-the-badge&logo=heart&logoColor=white)](https://ritualdev.in/donate)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub_Sponsors-RitualDev--Lab-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/RitualDev-Lab)
+
+<br/>
+
+[**⚡ 1-Click Dodo Payments Checkout**](https://checkout.dodopayments.com/buy/pdt_0NpjONGugY5QkrFDUaPva) &nbsp;•&nbsp; [**🎁 Interactive Donation Form (USD & INR UPI)**](https://ritualdev.in/donate) &nbsp;•&nbsp; [**❤️ GitHub Sponsors**](https://github.com/sponsors/RitualDev-Lab)
+
+<sub>🔒 *Zero physical shipping required. Powered by Dodo Payments (Merchant of Record) with instant tax invoice and global payment methods (Cards, UPI, Apple Pay).*</sub>
+
+</div>
 
 ## 📄 License
 MIT © [RitualDev Lab](https://github.com/RitualDev-Lab)
