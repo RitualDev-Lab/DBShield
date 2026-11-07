@@ -17,7 +17,7 @@ from .integrations.langchain import DBShieldSQLDatabase, DBShieldQueryTool
 from .integrations.crewai import DBShieldDatabaseTool
 from .integrations.llamaindex import DBShieldLlamaIndexTransform
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "DBShieldGuard",
