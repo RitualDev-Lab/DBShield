@@ -84,8 +84,8 @@
     }
   },
   "overrides": {
-    "body-parser": "^2.4.0",
-    "fast-uri": "^3.1.9"
+    "body-parser@>=2.0.0 <2.4.0": "^2.4.0",
+    "fast-uri@>=3.0.0 <3.1.9": "^3.1.9"
   },
   "resolutions": {
     "body-parser": "^2.4.0",

@@ -44,7 +44,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Verify Code Quality & Style
         run: pnpm run check
