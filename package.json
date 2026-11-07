@@ -1,6 +1,7 @@
 {
   "name": "@ritualdev-lab/dbshield",
   "version": "0.2.1",
+  "mcpName": "io.github.RitualDev-Lab/dbshield",
   "description": "Safety-first Database Guardrail & Sandboxing MCP Server for AI Coding Agents (Cursor, Claude Desktop, Antigravity). Protects databases from unconstrained mutations, drops, locks, and PII leaks.",
   "type": "module",
   "main": "dist/index.js",
