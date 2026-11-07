@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { ChatOpsNotifier } from "../approval/chatops.js";
@@ -24,6 +25,7 @@ export class DashboardServer {
   private readonly ssoAuthenticator?: SsoAuthenticator;
   private readonly complianceReporter: ComplianceReporter;
   private readonly chatOpsNotifier: ChatOpsNotifier;
+  private readonly sessionStore = new Map<string, string>();
   private sseClients: Set<http.ServerResponse> = new Set();
   private listenPort = 3100;
 
@@ -137,7 +139,8 @@ export class DashboardServer {
       const parts = cookieHeader.split(";").map((p) => p.trim());
       for (const p of parts) {
         if (p.startsWith("dbshield_session=")) {
-          return p.slice("dbshield_session=".length).trim();
+          const rawId = p.slice("dbshield_session=".length).trim();
+          return this.sessionStore.get(rawId) || rawId;
         }
       }
     }
@@ -244,8 +247,11 @@ export class DashboardServer {
         return;
       }
 
+      const sessionId = `sess_${crypto.randomBytes(32).toString("hex")}`;
+      this.sessionStore.set(sessionId, callbackResult.sessionToken);
+
       res.writeHead(302, {
-        "Set-Cookie": `dbshield_session=${callbackResult.sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+        "Set-Cookie": `dbshield_session=${sessionId}; Path=/; HttpOnly; Secure; SameSite=Lax`,
         Location: "/",
       });
       res.end();
@@ -262,6 +268,16 @@ export class DashboardServer {
 
     // SSO: Logout
     if (pathname === "/auth/logout") {
+      const cookieHeader = req.headers.cookie;
+      if (cookieHeader) {
+        const parts = cookieHeader.split(";").map((p) => p.trim());
+        for (const p of parts) {
+          if (p.startsWith("dbshield_session=")) {
+            const rawId = p.slice("dbshield_session=".length).trim();
+            this.sessionStore.delete(rawId);
+          }
+        }
+      }
       res.writeHead(302, {
         "Set-Cookie":
           "dbshield_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax",
@@ -285,17 +301,27 @@ export class DashboardServer {
         return;
       }
 
-      const framework = (url.searchParams.get("framework") as "soc2" | "iso27001") || "soc2";
-      const format = (url.searchParams.get("format") as "json" | "html" | "pdf") || "json";
+      const rawFramework = url.searchParams.get("framework");
+      const framework = rawFramework === "iso27001" ? "iso27001" : "soc2";
+      const rawFormat = url.searchParams.get("format");
+      const format = rawFormat === "html" ? "html" : rawFormat === "pdf" ? "pdf" : "json";
+
+      const rawCompany = url.searchParams.get("company");
+      const safeCompany = rawCompany
+        ? escapeServerHtml(rawCompany.replace(/[^\w\s.-]/g, ""))
+        : undefined;
+      const rawEnv = url.searchParams.get("env");
+      const safeEnv = rawEnv ? escapeServerHtml(rawEnv.replace(/[^\w\s.-]/g, "")) : undefined;
 
       const report = await this.complianceReporter.generateReport({
         framework,
         format,
-        companyName: url.searchParams.get("company") || undefined,
-        environment: url.searchParams.get("env") || undefined,
+        companyName: safeCompany,
+        environment: safeEnv,
       });
 
       if (format === "html") {
+        res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline';");
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(report.rawReport);
       } else if (format === "pdf") {
