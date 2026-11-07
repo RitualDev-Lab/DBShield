@@ -254,6 +254,7 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       assert.equal(statsAfterSafe.queriesAllowed, 1);
 
       // Test D: Intercept Destructive DDL (DROP TABLE)
+      await new Promise((r) => setTimeout(r, 100));
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("DROP TABLE users;"));
