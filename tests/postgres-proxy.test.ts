@@ -244,7 +244,7 @@ test("PostgresWireProxy - End-to-end TCP interceptor workflow", async () => {
       receivedClientPackets.length = 0;
       receivedUpstreamQueries = [];
       client.write(buildQueryPacket("SELECT id, name FROM users WHERE id = 1;"));
-      for (let i = 0; i < 25 && receivedUpstreamQueries.length === 0; i++) {
+      for (let i = 0; i < 25 && (receivedUpstreamQueries.length === 0 || !Buffer.concat(receivedClientPackets).includes(0x5a)); i++) {
         await new Promise((r) => setTimeout(r, 20));
       }
 
