@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ritualdev-lab/dbshield",
+  "title": "DBShield Database Guardrail & Sandboxing MCP Server",
+  "description": "Safety-first Database Guardrail, AST SQL Validator, PII Masker, and Copy-on-Write Sandbox for AI Coding Agents (Cursor, Claude Desktop, Antigravity, Windsurf)",
+  "version": "0.2.1",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/RitualDev-Lab/DBShield",
+    "source": "github"
+  },
+  "website": "https://ritualdev.in/dbshield",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@ritualdev-lab/dbshield",
+      "version": "0.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DBSHIELD_DIALECT",
+          "description": "Target database dialect (postgres, mysql, sqlite)",
+          "required": false,
+          "default": "sqlite"
+        },
+        {
+          "name": "DBSHIELD_DB_URL",
+          "description": "Connection URL or file path for target database",
+          "required": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/ritualdev-lab/dbshield:v0.2.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
