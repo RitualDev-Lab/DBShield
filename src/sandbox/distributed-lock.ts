@@ -35,15 +35,13 @@ export class DistributedLockManager {
   private readonly locks: Map<string, DistributedLockHandle> = new Map();
   private readonly lockHistory: DistributedLockHandle[] = [];
 
-  constructor() {}
-
   /**
    * Attempts to acquire a distributed lock on a database resource or table.
    * Returns a lock handle containing a monotonically increasing fencing token.
    */
   public async acquireLock(
     resourceKey: string,
-    options: DistributedLockOptions = {}
+    options: DistributedLockOptions = {},
   ): Promise<DistributedLockHandle | null> {
     const leaseTtlMs = options.leaseTtlMs ?? 5000;
     const retryCount = options.retryCount ?? 3;
@@ -125,12 +123,12 @@ export class DistributedLockManager {
   public async withDistributedLock<T>(
     resourceKey: string,
     action: (fenceToken: number) => Promise<T>,
-    options?: DistributedLockOptions
+    options?: DistributedLockOptions,
   ): Promise<T> {
     const lock = await this.acquireLock(resourceKey, options);
     if (!lock) {
       throw new Error(
-        `[DBShield:DistributedLock] Failed to acquire isolation lease on resource '${resourceKey}'`
+        `[DBShield:DistributedLock] Failed to acquire isolation lease on resource '${resourceKey}'`,
       );
     }
 

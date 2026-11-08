@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { DistributedLockManager } from "../src/sandbox/distributed-lock.js";
 
 test("DistributedLockManager acquires lock with monotonic fencing token", async () => {
@@ -112,5 +112,9 @@ test("withDistributedLock executes protected block and releases automatically on
   }
 
   assert.equal(caught, true);
-  assert.equal(manager.isLocked("table:customers"), false, "Lock must be released even after thrown error");
+  assert.equal(
+    manager.isLocked("table:customers"),
+    false,
+    "Lock must be released even after thrown error",
+  );
 });
