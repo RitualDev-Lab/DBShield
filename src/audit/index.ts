@@ -3,9 +3,22 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { PiiRedactor } from "../pii/redactor.js";
 import type { RiskLevel, SqlOperationType } from "../types/index.js";
+import {
+  type AuditLedgerEntry,
+  HmacAuditLedger,
+  type HmacLedgerOptions,
+  type LedgerVerificationResult,
+} from "./hmac-ledger.js";
 import { type SiemStreamStats, SiemTelemetryStreamer } from "./siem.js";
 
-export { SiemTelemetryStreamer, type SiemStreamStats };
+export {
+  SiemTelemetryStreamer,
+  type SiemStreamStats,
+  HmacAuditLedger,
+  type AuditLedgerEntry,
+  type LedgerVerificationResult,
+  type HmacLedgerOptions,
+};
 
 export interface AuditLogEntry {
   auditId: string;
@@ -36,6 +49,7 @@ export class AuditLogger {
   private readonly logFilePath?: string;
   private readonly redactor: PiiRedactor;
   private siemStreamer?: SiemTelemetryStreamer;
+  private hmacLedger?: HmacAuditLedger;
   private lastHash = "0000000000000000000000000000000000000000000000000000000000000000";
 
   constructor(
@@ -43,11 +57,26 @@ export class AuditLogger {
     maxBufferSize = 500,
     redactor?: PiiRedactor,
     siemStreamer?: SiemTelemetryStreamer,
+    hmacLedger?: HmacAuditLedger,
   ) {
     this.logFilePath = logFilePath;
     this.maxBufferSize = maxBufferSize;
     this.redactor = redactor || new PiiRedactor();
     this.siemStreamer = siemStreamer;
+    this.hmacLedger = hmacLedger;
+  }
+
+  public enableHmacLedger(options?: HmacLedgerOptions): HmacAuditLedger {
+    this.hmacLedger = new HmacAuditLedger({
+      logFilePath: this.logFilePath ? `${this.logFilePath}.hmac.jsonl` : undefined,
+      redactor: this.redactor,
+      ...options,
+    });
+    return this.hmacLedger;
+  }
+
+  public getHmacLedger(): HmacAuditLedger | undefined {
+    return this.hmacLedger;
   }
 
   public setSiemStreamer(streamer: SiemTelemetryStreamer): void {
@@ -92,6 +121,24 @@ export class AuditLogger {
         await fs.appendFile(this.logFilePath, line, "utf8");
       } catch {
         // Non-fatal if file write fails in restricted environments
+      }
+    }
+
+    // Append to cryptographically sealed HMAC ledger if configured
+    if (this.hmacLedger) {
+      try {
+        await this.hmacLedger.append({
+          auditId: entry.auditId,
+          timestamp: entry.timestamp,
+          operation: entry.operation,
+          status: entry.status,
+          riskLevel: entry.riskLevel,
+          riskScore: entry.riskScore,
+          sql: sanitizedSql,
+          violations: sanitizedViolations,
+        });
+      } catch {
+        // Non-fatal if HMAC append fails
       }
     }
 
