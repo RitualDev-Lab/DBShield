@@ -319,7 +319,9 @@ export class PostgresAdapter implements DatabaseAdapter {
 
     const client = await pool.connect();
 
+    // Enforce serializable dry-run transaction envelope with guaranteed rollback
     await client.query("BEGIN;");
+    await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;");
     try {
       const res = await client.query(sql, params);
       affectedRows = Number(res.rowCount || 0);
@@ -370,7 +372,9 @@ export class PostgresAdapter implements DatabaseAdapter {
 
     const client = await pool.connect();
 
+    // Enforce serializable isolation for atomic two-phase commit
     await client.query("BEGIN;");
+    await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;");
     try {
       const res = await client.query(sql, params);
       const changes = Number(res.rowCount || 0);

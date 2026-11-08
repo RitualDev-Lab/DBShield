@@ -23,6 +23,14 @@ export interface ParseResult {
   parseError?: string;
 }
 
+export interface SqlNormalizationResult {
+  normalizedSql: string;
+  hasMultiStatement: boolean;
+  hasCommentEvasion: boolean;
+  hasUnicodeSmuggling: boolean;
+  tokens: string[];
+}
+
 /**
  * Safely strips single-line (-- ...) and multi-line (/* ... *\/) SQL comments,
  * properly respecting single and double quoted string literals and escapes.
@@ -120,8 +128,116 @@ function mapDialect(dialect: DatabaseDialect): string {
   }
 }
 
+/**
+ * Normalizes SQL for AST analysis, security auditing, and tamper inspection.
+ * Strips zero-width unicode smuggling characters, neutralizes inline comment evasion (e.g. SEL/*...*\/ECT),
+ * detects multi-statement chaining via unquoted semicolons, and canonicalizes whitespace.
+ */
+export function normalizeSqlForAudit(sql: string): SqlNormalizationResult {
+  if (!sql) {
+    return {
+      normalizedSql: "",
+      hasMultiStatement: false,
+      hasCommentEvasion: false,
+      hasUnicodeSmuggling: false,
+      tokens: [],
+    };
+  }
+
+  // 1. Detect zero-width and invisible unicode characters (Unicode smuggling)
+  const zeroWidthPattern = /(?:\u200B|\u200C|\u200D|\uFEFF)/g;
+  const abnormalSpacePattern = /[\u00A0\u2028\u2029\u2000-\u200A]/g;
+  const hasUnicodeSmuggling = zeroWidthPattern.test(sql) || abnormalSpacePattern.test(sql);
+  const cleanUnicode = sql.replace(zeroWidthPattern, "").replace(abnormalSpacePattern, " ");
+
+  // 2. Detect inline comment evasion (e.g. SEL/**/ECT, UN/**/ION, DR/**/OP)
+  const commentEvasionPattern = /[a-zA-Z0-9_]\/\*[\s\S]*?\*\/[a-zA-Z0-9_]/;
+  const hasCommentEvasion = commentEvasionPattern.test(cleanUnicode);
+
+  // 3. Strip SQL comments safely while preserving string literals
+  const stripped = stripSqlComments(cleanUnicode);
+
+  // 4. Multi-statement injection detection:
+  // Count unquoted semicolons that separate non-empty statements
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let statementCount = 0;
+  let currentStmt = "";
+  const statements: string[] = [];
+
+  for (let i = 0; i < stripped.length; i++) {
+    const char = stripped[i];
+    const next = stripped[i + 1];
+
+    if (inSingleQuote) {
+      currentStmt += char;
+      if (char === "'" && next === "'") {
+        currentStmt += next;
+        i++;
+      } else if (char === "'") {
+        inSingleQuote = false;
+      }
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      currentStmt += char;
+      if (char === '"' && next === '"') {
+        currentStmt += next;
+        i++;
+      } else if (char === '"') {
+        inDoubleQuote = false;
+      }
+      continue;
+    }
+
+    if (char === "'") {
+      inSingleQuote = true;
+      currentStmt += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inDoubleQuote = true;
+      currentStmt += char;
+      continue;
+    }
+
+    if (char === ";") {
+      const trimmed = currentStmt.trim();
+      if (trimmed) {
+        statements.push(trimmed);
+        statementCount++;
+      }
+      currentStmt = "";
+      continue;
+    }
+
+    currentStmt += char;
+  }
+
+  const trailing = currentStmt.trim();
+  if (trailing) {
+    statements.push(trailing);
+    statementCount++;
+  }
+
+  const hasMultiStatement = statementCount > 1;
+  const normalizedSql = statements.join("; ").replace(/\s+/g, " ").trim();
+  const tokens = normalizedSql.split(/\s+/).filter(Boolean);
+
+  return {
+    normalizedSql,
+    hasMultiStatement,
+    hasCommentEvasion,
+    hasUnicodeSmuggling,
+    tokens,
+  };
+}
+
 export function parseSql(sql: string, dialect: DatabaseDialect = "sqlite"): ParseResult {
-  const stripped = stripSqlComments(sql);
+  const norm = normalizeSqlForAudit(sql);
+  const stripped = norm.normalizedSql;
   if (!stripped) {
     return {
       statements: [],
@@ -133,7 +249,7 @@ export function parseSql(sql: string, dialect: DatabaseDialect = "sqlite"): Pars
   const sqlDialect = mapDialect(dialect);
 
   try {
-    const astResult = parser.astify(sql, { database: sqlDialect });
+    const astResult = parser.astify(stripped, { database: sqlDialect });
     const astList = Array.isArray(astResult) ? astResult : [astResult];
 
     if (astList.length === 0) {
@@ -156,12 +272,12 @@ export function parseSql(sql: string, dialect: DatabaseDialect = "sqlite"): Pars
 
     return {
       statements,
-      isMultiStatement: astList.length > 1,
+      isMultiStatement: astList.length > 1 || norm.hasMultiStatement,
     };
   } catch (err) {
     return {
       statements: [],
-      isMultiStatement: false,
+      isMultiStatement: norm.hasMultiStatement,
       parseError: (err as Error).message,
     };
   }
