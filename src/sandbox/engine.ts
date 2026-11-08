@@ -24,7 +24,11 @@ export class SandboxEngine {
     return this.tokenManager;
   }
 
-  public async dryRun(sql: string, params: unknown[] = []): Promise<DryRunResult> {
+  public async dryRun(
+    sql: string,
+    params: unknown[] = [],
+    options?: { intent?: string; expectedAffectedRows?: number },
+  ): Promise<DryRunResult> {
     const evaluation = this.guard.evaluate(sql);
 
     // If AST guardrail outright blocks the query (unconstrained delete, tautology, DROP)
@@ -36,17 +40,44 @@ export class SandboxEngine {
         executionTimeMs: 0,
         warnings: evaluation.violations.map((v) => `[${v.code}] ${v.message}`),
         rollbackVerified: false,
+        intentAligned: false,
+        intentGap: `Query blocked by guardrail: ${evaluation.violations.map((v) => v.message).join("; ")}`,
       };
     }
 
     const adapterResult = await this.adapter.executeDryRun(sql, params);
 
     if (!adapterResult.safe) {
-      return adapterResult;
+      return {
+        ...adapterResult,
+        intentAligned: false,
+      };
     }
 
     const affectedRows = adapterResult.simulatedAffectedRows;
     const warnings = [...adapterResult.warnings, ...evaluation.warnings];
+
+    // Intent vs. Effect Gap Analysis
+    let intentAligned = true;
+    let intentGap: string | undefined;
+
+    if (options?.expectedAffectedRows !== undefined) {
+      if (affectedRows !== options.expectedAffectedRows) {
+        intentAligned = false;
+        intentGap = `[INTENT_EFFECT_DISCREPANCY] Expected affected rows was ${options.expectedAffectedRows}, but simulated execution affected ${affectedRows} rows. Execution requires manual review.`;
+        warnings.push(intentGap);
+      }
+    } else if (options?.intent) {
+      const lowerIntent = options.intent.toLowerCase();
+      const impliesSingle = /\b(single|one|a user|this user|specific|individual)\b/i.test(
+        lowerIntent,
+      );
+      if (impliesSingle && affectedRows > 1) {
+        intentAligned = false;
+        intentGap = `[INTENT_EFFECT_DISCREPANCY] Stated intent implied single-record modification, but simulated execution affected ${affectedRows} rows.`;
+        warnings.push(intentGap);
+      }
+    }
 
     // Blast Radius Limit Checking: separate soft warning threshold from hard safety limit
     const maxRows = this.config.maxRowsPerMutation;
@@ -64,6 +95,8 @@ export class SandboxEngine {
           `[EXCESSIVE_BLAST_RADIUS] ${blastWarning} Execution blocked across all safety tiers.`,
         ],
         rollbackVerified: adapterResult.rollbackVerified,
+        intentAligned: false,
+        intentGap: blastWarning,
       };
     }
 
@@ -94,6 +127,8 @@ export class SandboxEngine {
       expiresAt: tokenInfo.expiresAt,
       warnings,
       rollbackVerified: adapterResult.rollbackVerified,
+      intentAligned,
+      intentGap,
     };
   }
 

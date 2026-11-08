@@ -60,6 +60,8 @@ export interface DryRunResult {
   expiresAt?: string;
   warnings: string[];
   rollbackVerified: boolean;
+  intentAligned?: boolean;
+  intentGap?: string;
 }
 
 export interface ColumnDefinition {
