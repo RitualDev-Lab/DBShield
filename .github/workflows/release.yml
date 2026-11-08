@@ -76,6 +76,26 @@ jobs:
         with:
           subject-path: 'dist/**'
 
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: ./
+          format: 'cyclonedx-json'
+          output-file: 'dist/dbshield-cyclonedx.sbom.json'
+          artifact-name: 'dbshield-cyclonedx.sbom.json'
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: ./
+          format: 'spdx-json'
+          output-file: 'dist/dbshield-spdx.sbom.json'
+          artifact-name: 'dbshield-spdx.sbom.json'
+          upload-artifact: true
+          upload-release-assets: false
+
       - name: Pack Tarball
         run: pnpm pack
 
