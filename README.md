@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 <img src="assets/logo.png" alt="DBShield Logo" width="130" />
 
@@ -26,6 +26,12 @@
 
 *Protect your databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.*
 
+<br/>
+
+> [!IMPORTANT]
+> ### 💡 The Core Thesis: Bridging Intent vs. Effect
+> **"Dry-run sandboxing is the piece that stands out. Guardrails and masking catch known bad patterns, but a sandbox shows what an agent's query would actually do before production. That gap between intent and effect is where most agent database incidents begin."**
+
 </div>
 
 ---
@@ -33,6 +39,87 @@
 <p align="center">
   <img src="docs/terminal-demo.svg" alt="DBShield Terminal Interactive Demo" width="100%" />
 </p>
+
+---
+
+## 🎯 The "Intent vs. Effect" Problem in Autonomous AI Coding
+
+When an AI coding agent acts on your database, static AST rules and regex patterns only catch **known bad syntax** (like `DROP TABLE` or `WHERE 1=1`). They cannot catch semantically plausible queries where the **effect completely diverges from the user's intent**:
+
+```
+┌──────────────────────────────────────┐     ┌────────────────────────────────────────────────────────────┐
+│      AGENT'S STATED INTENT           │     │            AGENT'S EMITTED SQL                             │
+│ "Update avatar for user #402"        │ ──► │ UPDATE users SET role = 'admin' WHERE id = 402;            │
+│ Expected Effect: 1 row, non-sens col │     │ Simulated Effect: Privilege escalation to superadmin!      │
+└──────────────────────────────────────┘     └────────────────────────────────────────────────────────────┘
+                                                            ▲
+                                                            │
+                                  🚨 INTENT VS. EFFECT GAP DETECTED (BLOCKED)
+```
+
+```
+┌──────────────────────────────────────┐     ┌────────────────────────────────────────────────────────────┐
+│      AGENT'S STATED INTENT           │     │            AGENT'S EMITTED SQL                             │
+│ "Archive test trial accounts"        │ ──► │ DELETE FROM accounts WHERE created_at < '2026-01-01';      │
+│ Expected Blast Radius: ~5 rows       │     │ Simulated Effect: 14,820 customer production accounts lost │
+└──────────────────────────────────────┘     └────────────────────────────────────────────────────────────┘
+                                                            ▲
+                                                            │
+                                  🚨 BLAST RADIUS GAP DETECTED (BLOCKED & ROLLED BACK)
+```
+
+### 🔬 How DBShield Closes the Gap via Dry-Run Sandboxing
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Developer as LLM Agent / Developer
+    participant Proxy as DBShield Wire Proxy (:5432)
+    participant Guard as AST Normalizer & Intent Guard
+    participant Sandbox as Shadow Dry-Run Sandbox
+    participant OS as SQLite VFS OS Shim
+    participant Approvals as ChatOps (Slack / Teams)
+    participant DB as Production Database
+
+    Developer->>Proxy: SQL Mutation + Stated Intent Context
+    Proxy->>Guard: Lexical Normalization & Semantic Intent Check
+    
+    alt In-line Comment Evasion / Unicode Smuggling
+        Guard-->>Developer: ❌ [BLOCKED] Query normalization violation
+    end
+
+    Guard->>Sandbox: Execute in Isolated Transaction Envelope (BEGIN ... ROLLBACK)
+    Sandbox->>OS: Page-Level Write Interception (Token Verified)
+    OS-->>Sandbox: Intercepted OS Page Diffs & Computed Row Mutations
+    Sandbox-->>Guard: Exact Blast Radius (Affected Rows, Column Mutations, DDL)
+    
+    Guard->>Guard: Gap Analysis: Compare Intent vs. Effect
+    
+    alt Gap Detected (Row Count Regressed OR Column Privilege Mismatch)
+        Guard->>Approvals: Dispatch Two-Man Approval Card (Slack / Teams)
+        Approvals-->>Developer: ⏸️ Mutation Paused Pending Human Sign-Off
+    else Intent Aligned & Safe Blast Radius
+        Guard->>DB: Monotonic Fencing Token Commit
+        DB-->>Developer: ✅ Committed Successfully with HMAC-SHA256 Audit Trail
+    end
+```
+
+```mermaid
+flowchart TD
+    A["Agent Intent: 'Update Profile'"] --> B["Emitted SQL: 'UPDATE users SET role=admin'"]
+    B --> C["DBShield Wire Proxy (:5432 / :3306)"]
+    C --> D{"AST Lexical Normalizer<br/>(Strip Evasion & Comment Injection)"}
+    D -->|Passed| E["Shadow Sandbox Simulation<br/>(BEGIN ... ROLLBACK)"]
+    D -->|Violation| Block1["❌ Terminate with Security Alert"]
+    E --> F["OS Page-Level VFS Shim Interception"]
+    F --> G["Calculate Exact Mutation Blast Radius<br/>(Rows Mutated, Columns Modified)"]
+    G --> H{"Intent vs. Effect Gap Analyzer"}
+    H -->|"GAP DETECTED!<br/>(Privilege escalation or row explosion)"| I["🚨 Route to Slack / Teams Two-Man Rule"]
+    H -->|"INTENT ALIGNED<br/>(Blast radius matches intent)"| J["Sign with Monotonic Fencing Token"]
+    J --> K["Commit to Production Database"]
+    I -->|Human Approves| K
+    I -->|Human Rejects| L["Atomic Rollback & HMAC Ledger Alert"]
+```
 
 ---
 
@@ -66,11 +153,12 @@ When AI coding agents run introspection queries like `SELECT * FROM information_
 
 ## 🚀 Key Capabilities
 
-- 🔍 **SQL AST-Level Guardrail Engine**: Inspects query syntax trees before execution. Intercepts dangerous mutations, tautologies (`WHERE 1=1`), and unconstrained deletes.
-- 🧪 **Dry-Run Auto-Rollback Sandboxing**: Executes writes in an isolated transaction block (`BEGIN ... ROLLBACK`). Previews exact row impacts without altering the real database state.
+- 🧪 **Dry-Run Auto-Rollback Sandboxing & Intent vs. Effect Gap Engine**: Executes writes in an isolated transaction envelope (`BEGIN TRANSACTION READ ONLY; ... ROLLBACK;`). Calculates the exact difference between the agent's stated intent and actual row/column impact before anything touches production.
+- 📁 **SQLite OS Page-Level VFS Shim (`SqliteVfsShim`)**: Intercepts OS disk page read/write operations (4096-byte pages), blocking agents from altering `.sqlite` or `.db` files via direct filesystem access outside the DBShield wire proxy (`UNAUTHORIZED_DIRECT_FS_WRITE`).
+- 🔄 **Multi-Replica Raft Consensus & Monotonic Fencing Tokens**: Distributed state machine coordinator (`RaftConsensusCoordinator`) synchronizing transaction isolation leases and two-phase commit votes across clustered proxies to eliminate split-brain mutations.
+- 🔏 **Append-Only HMAC-SHA256 Audit Ledger (`HmacAuditLedger`)**: Meets **PCI-DSS v4.0 Requirement 10** and **SOC 2 CC6.8**. Implements strictly contiguous monotonic sequence numbers, query payload hashing, and Merkle tree root calculation for tamper-evident compliance exports.
+- 🔍 **SQL AST Lexical Normalizer**: Neutralizes zero-width unicode smuggling, comment-evasion tricks (e.g. `SEL/**/ECT`), multi-statement injection, and unconstrained deletes.
 - 🔒 **Dynamic Zero-Leak PII Masking**: Automatically detects sensitive fields (passwords, emails, phone numbers, tokens) and masks them before streaming back to LLM context.
-- 📐 **Safe Schema Introspection**: Exposes rich table definitions, foreign keys, and indexes without exposing data rows.
-- 🎛️ **Granular Safety Tiers**: Choose between `STRICT` (read-only / 1-row limits), `BALANCED` (production guardrails), or `PERMISSIVE` (custom rules).
 - 🎭 **Virtual Schema Masking & Column-Level RBAC**: Hides sensitive internal tables (`credentials`, `internal_audit`, `admin_*`) from `information_schema` / catalog introspection and masks restricted columns from agent context.
 - ⚡ **Missing Index & Query Plan Regressive Advisor**: Detects full-table sequential scans on unindexed tables and automatically synthesizes optimal `CREATE INDEX [CONCURRENTLY]` DDL statements with cost regression alerting.
 - 📺 **Real-time Live Query Approval Feed**: Zero-dependency web dashboard (`:3100`) streaming live agent queries, risk scores, and PII redactions, featuring 1-click **"Approve / Reject"** buttons for sensitive mutations.
