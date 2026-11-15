@@ -275,7 +275,9 @@ HTML (for websites/docs):
       const tierIdx = args.indexOf("--tier");
       const tierArg = tierIdx !== -1 && args[tierIdx + 1] ? args[tierIdx + 1] : "team";
       const isHub = tierArg === "hub" || tierArg === "enterprise" || tierArg === "99";
-      const planName = isHub ? "DBShield Team + Shared Redis Governance ($99/mo)" : "DBShield Team Approval Relay ($29/mo)";
+      const planName = isHub
+        ? "DBShield Team + Shared Redis Governance ($99/mo)"
+        : "DBShield Team Approval Relay ($29/mo)";
       const planPrice = isHub ? "$99/mo" : "$29/mo";
       const checkoutUrl = isHub
         ? "https://checkout.dodopayments.com/buy/pdt_0NrFSmrXT8zU2u5BKGJ7y?quantity=1&metadata_tier=dbshield_team_99&redirect_url=https%3A%2F%2Fritualdev.in%2Fpricing%2Fsuccess%2F%3Fproduct%3Ddbshield_team_99"
