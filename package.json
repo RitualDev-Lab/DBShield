@@ -79,15 +79,21 @@
   },
   "pnpm": {
     "overrides": {
+      "@hono/node-server": "^2.1.8",
+      "hono": "^4.13.16",
       "body-parser@>=2.0.0 <2.4.0": "^2.4.0",
       "fast-uri@>=3.0.0 <3.1.9": "^3.1.9"
     }
   },
   "overrides": {
+    "@hono/node-server": "^2.1.8",
+    "hono": "^4.13.16",
     "body-parser@>=2.0.0 <2.4.0": "^2.4.0",
     "fast-uri@>=3.0.0 <3.1.9": "^3.1.9"
   },
   "resolutions": {
+    "@hono/node-server": "^2.1.8",
+    "hono": "^4.13.16",
     "body-parser": "^2.4.0",
     "fast-uri": "^3.1.9"
   },
