@@ -35,6 +35,7 @@ const HELP_TEXT = `
     status               Inspect database connection and active security parameters
     benchmark            Run sub-millisecond wire-proxy latency benchmark
     badge <tool-name>    Generate "Secured by DBShield" verified sponsor badge markdown / SVG
+    upgrade [--tier]     Upgrade to Team ($29/mo) or Enterprise Hub ($99/mo) via Dodo Payments
     init                 Generate a default dbshield.config.json in the current directory
     install-claude       Automatically configure Claude Desktop to use DBShield
     install-cursor       Automatically configure Cursor (.cursor/mcp.json) to use DBShield
@@ -265,6 +266,37 @@ Markdown (for README.md):
 
 HTML (for websites/docs):
   <a href="https://ritualdev.in/dbshield"><img src="https://img.shields.io/badge/Secured_by-DBShield-0284c7?logo=shield&logoColor=white" alt="Secured by DBShield" /></a>
+`);
+      process.exit(0);
+      break;
+    }
+
+    case "upgrade": {
+      const tierIdx = args.indexOf("--tier");
+      const tierArg = tierIdx !== -1 && args[tierIdx + 1] ? args[tierIdx + 1] : "team";
+      const isHub = tierArg === "hub" || tierArg === "enterprise" || tierArg === "99";
+      const planName = isHub ? "DBShield Team + Shared Redis Governance ($99/mo)" : "DBShield Team Approval Relay ($29/mo)";
+      const planPrice = isHub ? "$99/mo" : "$29/mo";
+      const checkoutUrl = isHub
+        ? "https://checkout.dodopayments.com/buy/pdt_0NrFSmrXT8zU2u5BKGJ7y?quantity=1&metadata_tier=dbshield_team_99&redirect_url=https%3A%2F%2Fritualdev.in%2Fpricing%2Fsuccess%2F%3Fproduct%3Ddbshield_team_99"
+        : "https://checkout.dodopayments.com/buy/pdt_0NpjONGugY5QkrFDUaPva?quantity=1&paymentAmount=29&amount=29&paymentCurrency=USD&currency=USD&metadata_tier=dbshield_team_29&redirect_url=https%3A%2F%2Fritualdev.in%2Fpricing%2Fsuccess%2F%3Fproduct%3Ddbshield_team_29";
+
+      console.log(`
+💳 DBShield Commercial Upgrade (Powered by Dodo Payments)
+─────────────────────────────────────────────────────────────
+Plan:        ${planName}
+Billing:     ${planPrice} (Tax deductible corporate invoice)
+
+Enterprise Features Included:
+  ✅ Interactive Slack #db-approvals & Teams mutation webhook relay
+  ✅ Shared Redis cluster query caching (-70% token & database spend)
+  ✅ SOC 2 Type II & ISO 27001 automated compliance evidence exports
+  ✅ Multi-agent fleet central audit logging & tamper-evident ledger
+
+Merchant of Record: Dodo Payments (Global Tax, GST, VAT, Cards, UPI, Apple Pay)
+Direct Checkout:    ${checkoutUrl}
+Portal:             https://ritualdev.in/pricing
+─────────────────────────────────────────────────────────────
 `);
       process.exit(0);
       break;
