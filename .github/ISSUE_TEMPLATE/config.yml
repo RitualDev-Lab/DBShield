@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerabilities
+    url: mailto:security@ritualdev.in
+    about: Report security issues privately via email.
+  - name: RitualDev-Lab Discussions
+    url: https://ritualdev.in
+    about: Ask questions and connect with the community.
