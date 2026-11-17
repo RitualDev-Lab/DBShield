@@ -85,7 +85,8 @@ test("ChatOpsNotifier - Generates Microsoft Teams AdaptiveCard", () => {
   assert.strictEqual(card.type, "message");
   assert.strictEqual(card.attachments[0].contentType, "application/vnd.microsoft.card.adaptive");
   assert.ok(card.attachments[0].content.body.some((b: any) => b.type === "FactSet"));
-  assert.strictEqual(card.attachments[0].content.actions.length, 2);
+  assert.strictEqual(card.attachments[0].content.actions.length, 3);
+  assert.strictEqual(card.attachments[0].content.actions[2].title, "Inspect Diff 🔍");
 });
 
 test("ChatOpsNotifier - Verifies Slack Request HMAC-SHA256 Signatures", () => {
