@@ -139,6 +139,16 @@ export class ChatOpsNotifier {
             action_id: "dbshield_reject",
             value: req.id,
           },
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "Inspect Dry-Run Diff 🔍",
+              emoji: true,
+            },
+            action_id: "dbshield_view_diff",
+            value: req.id,
+          },
         ],
       });
     }
@@ -205,22 +215,73 @@ export class ChatOpsNotifier {
     };
 
     if (isPending && this.config.callbackBaseUrl) {
-      const base = this.config.callbackBaseUrl.replace(/\/$/, "");
+      const approveUrl = this.generateSignedActionUrl(req.id, "approve");
+      const rejectUrl = this.generateSignedActionUrl(req.id, "reject");
+      const diffUrl = this.generateSignedActionUrl(req.id, "diff");
+
       card.attachments[0].content.actions = [
         {
           type: "Action.OpenUrl",
           title: "Approve ✅",
-          url: `${base}/api/approvals/${req.id}/approve`,
+          url: approveUrl,
         },
         {
           type: "Action.OpenUrl",
           title: "Reject ❌",
-          url: `${base}/api/approvals/${req.id}/reject`,
+          url: rejectUrl,
+        },
+        {
+          type: "Action.OpenUrl",
+          title: "Inspect Diff 🔍",
+          url: diffUrl,
         },
       ];
     }
 
     return card;
+  }
+
+  /**
+   * Generates an HMAC-SHA256 signed action URL for 1-click approvals with timestamp expiration.
+   */
+  public generateSignedActionUrl(
+    requestId: string,
+    action: string,
+    expiresInSeconds = 86400,
+  ): string {
+    const base = (this.config.callbackBaseUrl || "http://localhost:3000").replace(/\/$/, "");
+    const expires = Math.floor(Date.now() / 1000) + expiresInSeconds;
+    const secret = this.config.slackSigningSecret || "dbshield-chatops-secret";
+    const sig = crypto
+      .createHmac("sha256", secret)
+      .update(`${requestId}:${action}:${expires}`)
+      .digest("hex");
+    return `${base}/api/approvals/${requestId}/${action}?expires=${expires}&signature=${sig}`;
+  }
+
+  /**
+   * Verifies an HMAC-SHA256 signed action link.
+   */
+  public verifySignedAction(
+    requestId: string,
+    action: string,
+    expiresStr: string,
+    signature: string,
+  ): boolean {
+    const expires = Number.parseInt(expiresStr, 10);
+    if (Number.isNaN(expires) || Math.floor(Date.now() / 1000) > expires) {
+      return false; // Expired
+    }
+    const secret = this.config.slackSigningSecret || "dbshield-chatops-secret";
+    const expectedSig = crypto
+      .createHmac("sha256", secret)
+      .update(`${requestId}:${action}:${expires}`)
+      .digest("hex");
+
+    const bufA = Buffer.from(signature, "utf8");
+    const bufB = Buffer.from(expectedSig, "utf8");
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
   }
 
   /**
