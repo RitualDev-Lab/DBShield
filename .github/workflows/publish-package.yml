@@ -42,7 +42,6 @@ jobs:
         run: pnpm test
 
       - name: Publish to GitHub Packages
-        continue-on-error: true
         run: |
           echo "@ritualdev-lab:registry=https://npm.pkg.github.com" > .npmrc
           echo "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}" >> .npmrc
@@ -88,7 +87,6 @@ jobs:
           subject-path: 'dist/**'
 
       - name: Publish to npm with Sigstore Provenance
-        continue-on-error: true
         run: pnpm publish --no-git-checks --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
