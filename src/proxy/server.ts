@@ -11,7 +11,11 @@ import {
   encodeReadyForQuery,
   encodeSslDenial,
   extractSqlFromPayload,
+  parseBindMessage,
+  parseExecuteMessage,
   parseFrontendFrame,
+  parseParseMessage,
+  reconstructParameterizedSql,
 } from "./protocol.js";
 
 export interface PostgresWireProxyOptions {
@@ -188,6 +192,10 @@ export class PostgresWireProxy {
     let inErrorState = false;
     let upstreamConnected = false;
     const queuedClientPackets: Buffer[] = [];
+    // Per-connection Extended Query ('P'/'B'/'E') prepared statement & portal tracker (SEC-08)
+    const preparedStatements = new Map<string, string>();
+    const boundPortals = new Map<string, { statementName: string; reconstructedSql: string }>();
+    const blockedPortals = new Set<string>();
 
     // Create upstream connection to target PostgreSQL server
     const upstreamSocket = new net.Socket();
@@ -325,11 +333,16 @@ export class PostgresWireProxy {
         // Post-startup message handling
         if (message.type === "Query" || message.type === "Parse") {
           this.stats.queriesProcessed++;
-          const sql = extractSqlFromPayload(message.type, message.payload);
+          const parsedStmt = message.type === "Parse" ? parseParseMessage(message.payload) : null;
+          const sql = parsedStmt?.query ?? extractSqlFromPayload(message.type, message.payload);
 
           if (!sql || !sql.trim()) {
             forwardToUpstream(message.raw);
             continue;
+          }
+
+          if (parsedStmt) {
+            preparedStatements.set(parsedStmt.statementName, parsedStmt.query);
           }
 
           // Evaluate SQL with DBShield guardrails
@@ -453,9 +466,66 @@ export class PostgresWireProxy {
             // Reset error state and send ReadyForQuery
             clientSocket.write(encodeReadyForQuery("I"));
             inErrorState = false;
+            blockedPortals.clear();
           }
           // Discard Bind, Execute, Describe while in error state
           continue;
+        }
+
+        // Extended Query Bind ('B'): reconstruct bound SQL ($1, $2, ...) & re-evaluate guardrails (SEC-08)
+        if (message.type === "Bind") {
+          const bindMsg = parseBindMessage(message.payload);
+          if (bindMsg) {
+            const templateSql = preparedStatements.get(bindMsg.statementName);
+            if (templateSql) {
+              const reconstructedSql = reconstructParameterizedSql(templateSql, bindMsg.parameters);
+              boundPortals.set(bindMsg.portalName, {
+                statementName: bindMsg.statementName,
+                reconstructedSql,
+              });
+              const bindEval = this.evaluateQuery(reconstructedSql);
+              if (!bindEval.allowed) {
+                this.stats.queriesIntercepted++;
+                inErrorState = true;
+                blockedPortals.add(bindMsg.portalName);
+                const primaryViolation = bindEval.violations[0];
+                this.logger.log({
+                  auditId: `audit-proxy-bind-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                  timestamp: new Date().toISOString(),
+                  sql: reconstructedSql,
+                  status: "BLOCKED",
+                  riskLevel: bindEval.riskLevel,
+                  riskScore: bindEval.riskScore,
+                  operation: bindEval.operation,
+                  violations: bindEval.violations.map((v) => `${v.code}: ${v.message}`),
+                });
+                clientSocket.write(
+                  encodeErrorResponse({
+                    severity: "ERROR",
+                    code: "42501",
+                    message: `[DBSHIELD_INTERCEPTED] Extended Query Bind blocked: ${primaryViolation?.message || "Policy violation"}`,
+                    detail: `Risk Level: ${bindEval.riskLevel} | Statement: ${bindMsg.statementName || "(unnamed)"}`,
+                  }),
+                );
+                continue;
+              }
+            }
+          }
+        }
+
+        // Extended Query Execute ('E'): enforce block if portal was flagged
+        if (message.type === "Execute") {
+          const execMsg = parseExecuteMessage(message.payload);
+          if (execMsg && blockedPortals.has(execMsg.portalName)) {
+            clientSocket.write(
+              encodeErrorResponse({
+                severity: "ERROR",
+                code: "42501",
+                message: "[DBSHIELD_INTERCEPTED] Extended Query Execute blocked by DBShield policy",
+              }),
+            );
+            continue;
+          }
         }
 
         // Forward all other protocol packets (Sync, Bind, Execute, Terminate, Password, etc.)
