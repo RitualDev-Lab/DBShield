@@ -188,6 +188,110 @@ export function parseFrontendFrame(
   };
 }
 
+export interface ParsedParseMessage {
+  statementName: string;
+  query: string;
+}
+
+export interface ParsedBindMessage {
+  portalName: string;
+  statementName: string;
+  parameters: Array<string | null>;
+}
+
+export interface ParsedExecuteMessage {
+  portalName: string;
+  maxRows: number;
+}
+
+/**
+ * Decodes a PostgreSQL Extended Query Parse ('P') frame payload into statementName + query.
+ */
+export function parseParseMessage(payload: Buffer): ParsedParseMessage | null {
+  const stmtEnd = payload.indexOf(0);
+  if (stmtEnd === -1) return null;
+  const statementName = payload.toString("utf8", 0, stmtEnd);
+  const queryStart = stmtEnd + 1;
+  const queryEnd = payload.indexOf(0, queryStart);
+  if (queryEnd === -1) return null;
+  const query = payload.toString("utf8", queryStart, queryEnd);
+  return { statementName, query };
+}
+
+/**
+ * Decodes a PostgreSQL Extended Query Bind ('B') frame payload into portalName, statementName,
+ * and bound parameter string values (supporting NULL parameters with length -1).
+ */
+export function parseBindMessage(payload: Buffer): ParsedBindMessage | null {
+  const portalEnd = payload.indexOf(0);
+  if (portalEnd === -1) return null;
+  const portalName = payload.toString("utf8", 0, portalEnd);
+
+  const stmtStart = portalEnd + 1;
+  const stmtEnd = payload.indexOf(0, stmtStart);
+  if (stmtEnd === -1) return null;
+  const statementName = payload.toString("utf8", stmtStart, stmtEnd);
+
+  let offset = stmtEnd + 1;
+  if (offset + 2 > payload.length) {
+    return { portalName, statementName, parameters: [] };
+  }
+  const formatCount = payload.readInt16BE(offset);
+  offset += 2 + Math.max(0, formatCount) * 2;
+
+  if (offset + 2 > payload.length) {
+    return { portalName, statementName, parameters: [] };
+  }
+  const paramCount = payload.readInt16BE(offset);
+  offset += 2;
+
+  const parameters: Array<string | null> = [];
+  for (let i = 0; i < paramCount; i++) {
+    if (offset + 4 > payload.length) break;
+    const paramLen = payload.readInt32BE(offset);
+    offset += 4;
+    if (paramLen === -1) {
+      parameters.push(null);
+    } else if (paramLen >= 0 && offset + paramLen <= payload.length) {
+      parameters.push(payload.toString("utf8", offset, offset + paramLen));
+      offset += paramLen;
+    } else {
+      break;
+    }
+  }
+
+  return { portalName, statementName, parameters };
+}
+
+/**
+ * Decodes a PostgreSQL Extended Query Execute ('E') frame payload into portalName + maxRows.
+ */
+export function parseExecuteMessage(payload: Buffer): ParsedExecuteMessage | null {
+  const portalEnd = payload.indexOf(0);
+  if (portalEnd === -1) return null;
+  const portalName = payload.toString("utf8", 0, portalEnd);
+  const maxRows = portalEnd + 5 <= payload.length ? payload.readInt32BE(portalEnd + 1) : 0;
+  return { portalName, maxRows };
+}
+
+/**
+ * Reconstructs parameterized PostgreSQL SQL ($1, $2, ...) with bound values for AST guardrail inspection.
+ */
+export function reconstructParameterizedSql(
+  templateSql: string,
+  params: Array<string | null>,
+): string {
+  if (!params || params.length === 0) return templateSql;
+  return templateSql.replace(/\$(\d+)\b/g, (full, idxStr) => {
+    const idx = Number.parseInt(idxStr, 10) - 1;
+    if (idx < 0 || idx >= params.length) return full;
+    const val = params[idx];
+    if (val === null) return "NULL";
+    if (/^-?\d+(?:\.\d+)?$/.test(val)) return val;
+    return `'${val.replace(/'/g, "''")}'`;
+  });
+}
+
 /**
  * Extract SQL query string from a Query ('Q') or Parse ('P') packet payload.
  */
