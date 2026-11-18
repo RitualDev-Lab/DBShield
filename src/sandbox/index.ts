@@ -7,3 +7,4 @@ export * from "./shadow-db.js";
 export * from "./sqlite-vfs-shim.js";
 export * from "./raft-consensus.js";
 export * from "./detached-dryrun.js";
+export * from "./preimage-coordinator.js";
