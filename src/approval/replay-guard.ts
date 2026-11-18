@@ -26,12 +26,68 @@ export interface ApprovalTokenVerification {
 }
 
 export function normalizeSqlForAstHash(sql: string): string {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/--[^\r\n]*/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  // Single-pass O(n) SQL comment stripper & whitespace normalizer (immune to ReDoS)
+  const out: string[] = [];
+  let inBlockComment = false;
+  let inLineComment = false;
+  let lastWasSpace = true;
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next = i + 1 < sql.length ? sql[i + 1] : "";
+
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (inLineComment) {
+      if (ch === "\n" || ch === "\r") {
+        inLineComment = false;
+        if (!lastWasSpace) {
+          out.push(" ");
+          lastWasSpace = true;
+        }
+      }
+      continue;
+    }
+
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      if (!lastWasSpace) {
+        out.push(" ");
+        lastWasSpace = true;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === "-" && next === "-") {
+      inLineComment = true;
+      if (!lastWasSpace) {
+        out.push(" ");
+        lastWasSpace = true;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f") {
+      if (!lastWasSpace) {
+        out.push(" ");
+        lastWasSpace = true;
+      }
+      continue;
+    }
+
+    out.push(ch.toLowerCase());
+    lastWasSpace = false;
+  }
+
+  return out.join("").trim();
 }
 
 export class ReplayProofApprovalTokenManager {
