@@ -1,44 +1,44 @@
-<div align="center">
+# DBShield
 
-<img src="assets/logo.png" alt="DBShield Logo" width="130" />
+**Stop AI coding agents from running `DROP TABLE`, bulk `DELETE`, or unindexed scans against your database — including Prisma, Drizzle, and TypeORM prepared statements.**
 
-# 🛡️ DBShield
-
-**The Safety-First Database Guardrail & Sandboxing MCP Server for AI Coding Agents**
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![npm version](https://img.shields.io/npm/v/@ritualdev-lab/dbshield.svg?color=cb3837&logo=npm)](https://www.npmjs.com/package/@ritualdev-lab/dbshield)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/RitualDev-Lab/DBShield/badge)](https://securityscorecards.dev/viewer/?repo=github.com/RitualDev-Lab/DBShield)
-[![SOC 2 Audit Ready](https://img.shields.io/badge/SOC%202%20Type%20II-Audit%20Ready-10b981?logo=shield&logoColor=white)](https://ritualdev.in/trust)
-[![Website](https://img.shields.io/badge/Website-ritualdev.in%2Fdbshield-00F59B.svg)](https://ritualdev.in/dbshield)
-[![Documentation Guide](https://img.shields.io/badge/Docs-GUIDE.md-blue.svg)](./GUIDE.md)
-[![Threat Model](https://img.shields.io/badge/Security-THREAT__MODEL.md-red.svg)](./THREAT_MODEL.md)
-[![IDE Extension](https://img.shields.io/badge/Open_VSX-Ritual_Agent_Defense-blue.svg)](https://open-vsx.org/extension/ritualdev-lab/ritual-agent-defense)
-[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%201.0-8A2BE2.svg)](https://modelcontextprotocol.io/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.0-green.svg)](https://nodejs.org/)
-[![Sponsor on Dodo Payments](https://img.shields.io/badge/Sponsor-Dodo%20Payments-8b5cf6?style=for-the-badge&logo=shield&logoColor=white)](https://checkout.dodopayments.com/buy/pdt_0NpjONGugY5QkrFDUaPva)
 [![CI](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml/badge.svg)](https://github.com/RitualDev-Lab/DBShield/actions/workflows/ci.yml)
-[![Docker Image](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
-[![Helm Chart](https://img.shields.io/badge/Helm-v0.2.0-0F1689.svg?logo=helm&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
-[![Prometheus](https://img.shields.io/badge/Prometheus-Metrics%20Exporter-E6522C.svg?logo=prometheus&logoColor=white)](https://github.com/RitualDev-Lab/DBShield)
-[![Biome](https://img.shields.io/badge/Code%20Style-Biome-60a5fa.svg)](https://biomejs.dev)
+[![npm](https://img.shields.io/npm/v/@ritualdev-lab/dbshield.svg?style=flat-square&color=cb3837)](https://www.npmjs.com/package/@ritualdev-lab/dbshield)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/RitualDev-Lab/DBShield/badge)](https://securityscorecards.dev/viewer/?repo=github.com/RitualDev-Lab/DBShield)
 
-*Protect your databases from accidental bulk deletes, catastrophic drops, locks, and PII leaks when paired with Cursor, Claude Desktop, Antigravity, or Windsurf.*
+Local wire-protocol SQL firewall, dry-run blast-radius sandbox, and non-blocking ChatOps approval proxy for PostgreSQL, MySQL, and SQLite. Works transparently with Claude Code, Cursor, Windsurf, and any SQL client or ORM.
 
-<br/>
+### Try it in 10 seconds
 
-> [!IMPORTANT]
-> ### 💡 The Core Thesis: Bridging Intent vs. Effect
-> **"Dry-run sandboxing is the piece that stands out. Guardrails and masking catch known bad patterns, but a sandbox shows what an agent's query would actually do before production. That gap between intent and effect is where most agent database incidents begin."**
+```bash
+# Start the local wire-protocol firewall proxy (points at your local Postgres on :5432)
+npx @ritualdev-lab/dbshield proxy --port 5433 --tier STRICT
 
-</div>
+# Or expose DBShield as an MCP server for Claude Desktop / Cursor
+npx @ritualdev-lab/dbshield mcp
+```
 
----
+```text
+[DBShield :5433] Intercepted Extended Query (Parse/Bind/Execute):
+  SQL:    DELETE FROM accounts WHERE created_at < '2026-01-01';
+  DryRun: 14,820 rows affected (ROLLBACK executed in 3.1ms — 0 DB locks held)
+  Action: BLOCKED -> Sent replay-proof HMAC approval card to Slack (#db-approvals)
+```
 
 <p align="center">
   <img src="docs/terminal-demo.svg" alt="DBShield Terminal Interactive Demo" width="100%" />
 </p>
+
+> Want to record a fresh 15-second terminal GIF? Run [`vhs assets/demo.tape`](assets/demo.tape) with [Charm VHS](https://github.com/charmbracelet/vhs).
+
+### Why simple regex SQL proxies fail
+
+- **Prepared statements bypass naive filters**: Prisma, Drizzle, and `pg` send PostgreSQL Extended Query frames (`Parse 'P'` / `Bind 'B'` / `Execute 'E'`) instead of Simple Query `'Q'`. DBShield reconstructs bound parameterized SQL ASTs on the wire before evaluation.
+- **Holding `BEGIN ...` locks kills production**: Waiting for a Slack click inside an open transaction locks tables. DBShield computes a pre-image state checksum (`<5ms`), immediately executes `ROLLBACK` to free the pool, and re-verifies zero state drift on a fresh connection when approved.
+- **Replay attacks on ChatOps webhooks**: Every Slack / MS Teams approval token is bound to `HMAC-SHA256(secret, normalized_sql_ast | db_id | expires_at | single_use_nonce)` with 10-minute TTL and `403 Token Already Consumed` on replay.
+
+[Full Guide](GUIDE.md) · [Threat Model](THREAT_MODEL.md) · [Docs](docs/) · [GitHub Issues & Good First Issues](https://github.com/RitualDev-Lab/DBShield/issues)
 
 ---
 
