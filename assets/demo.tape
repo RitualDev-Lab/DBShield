@@ -4,31 +4,38 @@
 
 Output assets/demo.gif
 
-Set Shell "bash"
+Set Shell "powershell"
 Set FontSize 16
 Set Width 1100
-Set Height 620
-Set Padding 20
+Set Height 640
+Set Padding 24
 Set Theme "TokyoNight"
-Set TypingSpeed 40ms
+Set TypingSpeed 35ms
 
-Type "# 1. Audit SQL migrations & queries for destructive ops and missing WHERE clauses"
+Hide
+Type "function prompt { '$ ' }"
+Enter
+Type "function dbshield { node dist/cli.js @args }"
+Enter
+Type "Clear-Host"
 Enter
 Sleep 600ms
-Type `npx @ritualdev-lab/dbshield audit "DROP TABLE users CASCADE; DELETE FROM orders;"`
-Enter
-Sleep 2.5s
+Show
 
-Type "# 2. Inspect wire-protocol firewall options (PostgreSQL Extended Query P/B/E)"
+Type "# 1. Inspect DBShield wire-protocol SQL firewall & MCP guardrails"
 Enter
-Sleep 600ms
-Type "npx @ritualdev-lab/dbshield proxy --help"
+Sleep 400ms
+Type "dbshield --help"
 Enter
-Sleep 2.5s
+Sleep 3.5s
 
-Type "# 3. Check DBShield status & safety tiers"
+Type "Clear-Host"
 Enter
-Sleep 600ms
-Type "npx @ritualdev-lab/dbshield --version"
+Sleep 300ms
+
+Type "# 2. Verify installed DBShield engine version"
+Enter
+Sleep 400ms
+Type "dbshield --version"
 Enter
 Sleep 2s

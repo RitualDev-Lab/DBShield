@@ -27,10 +27,10 @@ npx @ritualdev-lab/dbshield mcp
 ```
 
 <p align="center">
-  <img src="docs/terminal-demo.svg" alt="DBShield Terminal Interactive Demo" width="100%" />
+  <img src="assets/demo.gif" alt="DBShield Live Terminal Demo" width="820" />
 </p>
 
-> Want to record a fresh 15-second terminal GIF? Run [`vhs assets/demo.tape`](assets/demo.tape) with [Charm VHS](https://github.com/charmbracelet/vhs).
+> Recorded with [Charm VHS](https://github.com/charmbracelet/vhs) from [`assets/demo.tape`](assets/demo.tape).
 
 ### Why simple regex SQL proxies fail
 
