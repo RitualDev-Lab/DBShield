@@ -89,7 +89,7 @@ test("Packaging - Kubernetes Helm Chart Schema & Templates Verification", async 
   const chartContent = await fs.readFile(chartPath, "utf8");
   assert.ok(chartContent.includes("apiVersion: v2"));
   assert.ok(chartContent.includes("name: dbshield"));
-  assert.ok(chartContent.includes("version: 0.2.0"));
+  assert.ok(chartContent.includes("version: 0.2.1"));
 
   const valuesPath = path.resolve("charts/dbshield/values.yaml");
   const valuesContent = await fs.readFile(valuesPath, "utf8");

@@ -65,19 +65,20 @@
   },
   "homepage": "https://ritualdev.in/dbshield/",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "node-sql-parser": "^5.3.7",
     "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "@types/node": "^26.6.6",
+    "@biomejs/biome": "1.9.4",
+    "@types/node": "22.20.5",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.19.3",
-    "typescript": "^7.0.2"
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
   },
   "pnpm": {
+    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"],
     "overrides": {
       "@hono/node-server": "^2.1.8",
       "hono": "^4.13.16",
@@ -99,5 +100,9 @@
   },
   "engines": {
     "node": ">=20.0.0"
-  }
+  },
+  "onlyBuiltDependencies": [
+    "@biomejs/biome",
+    "esbuild"
+  ]
 }

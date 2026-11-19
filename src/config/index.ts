@@ -68,7 +68,7 @@ export const ConfigSchema = z.object({
   readReplicaHost: z.string().optional(),
   readReplicaPort: z.number().int().positive().optional(),
   metricsPort: z.number().int().positive().default(9090),
-  metricsHost: z.string().default("0.0.0.0"),
+  metricsHost: z.string().default("127.0.0.1"),
   enableMetrics: z.boolean().default(true),
   enableVirtualSchema: z.boolean().default(false),
   virtualSchema: z
@@ -91,7 +91,7 @@ export const ConfigSchema = z.object({
     .optional(),
   enableDashboard: z.boolean().default(false),
   dashboardPort: z.number().int().positive().default(3100),
-  dashboardHost: z.string().default("0.0.0.0"),
+  dashboardHost: z.string().default("127.0.0.1"),
   requireApprovalForMutations: z.boolean().default(false),
 });
 
@@ -133,12 +133,12 @@ export const DEFAULT_CONFIG: DBShieldConfig = {
   connectionTimeoutMillis: 5000,
   enableReadReplicaRouting: false,
   metricsPort: 9090,
-  metricsHost: "0.0.0.0",
+  metricsHost: "127.0.0.1",
   enableMetrics: true,
   enableVirtualSchema: false,
   enableDashboard: false,
   dashboardPort: 3100,
-  dashboardHost: "0.0.0.0",
+  dashboardHost: "127.0.0.1",
   requireApprovalForMutations: false,
 };
 

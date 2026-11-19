@@ -1,6 +1,6 @@
 [package]
 name = "dbshield-core"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["RitualDev Studio <engineering@ritualdev.in>"]
 description = "High-performance zero-GC wire protocol proxy engine, connection pooling, and virtual shadow database for DBShield."

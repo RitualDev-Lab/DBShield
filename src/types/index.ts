@@ -322,13 +322,13 @@ export interface DBShieldConfig {
   readReplicaHost?: string; // Target read-replica host for pure SELECT queries
   readReplicaPort?: number; // Target read-replica port
   metricsPort?: number; // Prometheus metrics & health HTTP port (default 9090)
-  metricsHost?: string; // Prometheus metrics & health HTTP host (default "0.0.0.0")
+  metricsHost?: string; // Prometheus metrics & health HTTP host (default "127.0.0.1")
   enableMetrics?: boolean; // Enable Prometheus metrics exporter (default true)
   virtualSchema?: VirtualSchemaConfig;
   enableVirtualSchema?: boolean; // Default false
   enableDashboard?: boolean; // Default false
   dashboardPort?: number; // Port for live query approval web dashboard (default 3100)
-  dashboardHost?: string; // Host for dashboard (default "0.0.0.0")
+  dashboardHost?: string; // Host for dashboard (default "127.0.0.1")
   requireApprovalForMutations?: boolean; // Block sensitive mutations until approved via dashboard
   airGapped?: boolean; // 100% offline mode: zero outbound network phone-homes, strictly local telemetry & models
   sso?: SsoConfig; // SSO/OIDC/SAML authentication configuration
