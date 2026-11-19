@@ -101,8 +101,5 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "onlyBuiltDependencies": [
-    "@biomejs/biome",
-    "esbuild"
-  ]
+  "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
 }
