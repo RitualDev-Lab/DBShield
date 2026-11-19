@@ -25,9 +25,9 @@ export class MetricsServer {
 
   constructor(options: MetricsServerOptions = {}) {
     this.port = options.port ?? 9090;
-    this.host = options.host ?? "0.0.0.0";
+    this.host = options.host ?? "127.0.0.1";
     this.registry = options.registry || getGlobalMetrics();
-    this.version = options.version || "0.2.0";
+    this.version = options.version || "0.2.1";
     this.proxyInfo = options.proxyInfo;
   }
 

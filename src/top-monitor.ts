@@ -6,7 +6,6 @@
  * two-phase commit shadow tokens, and dynamic PII redaction throughput.
  */
 
-import { execSync } from "node:child_process";
 import { platform } from "node:os";
 import readline from "node:readline";
 
@@ -145,7 +144,7 @@ export function getTopMonitorSnapshot(safetyTier = "BALANCED"): TopMonitorSnapsh
 
   return {
     timestamp: new Date().toISOString(),
-    version: "0.2.0",
+    version: "0.2.1",
     safetyTier,
     dialect: "postgresql",
     proxyListenPort: 5433,
@@ -183,6 +182,7 @@ ${color.dim}Queries: ${snapshot.stats.totalQueriesProcessed} │ Blocked Attacks
 
   let sessionTable = `
 ${color.bold}── Active Agent Database Sessions (${snapshot.activeSessions.length}) ──────────────────────────────────────────${color.reset}
+  ${color.dim}(Standby Telemetry - Connect client to port ${snapshot.proxyListenPort} for live active connections)${color.reset}
   ${color.dim}SESSION ID  CLIENT NAME           DATABASE         PROTOCOL        QPS     AVG LAT   STATUS${color.reset}
 `;
 

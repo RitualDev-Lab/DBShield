@@ -11,11 +11,12 @@ import {
   installWindsurf,
 } from "./configurator/index.js";
 import { DashboardServer } from "./dashboard/index.js";
+import { SqlGuardEngine } from "./guard/engine.js";
 import { PostgresWireProxy } from "./proxy/index.js";
 import { createMcpServer } from "./server/index.js";
 import { runTopMonitor } from "./top-monitor.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 
 const HELP_TEXT = `
   🛡️  DBShield - Database Guardrail & Sandboxing MCP Server v${VERSION}
@@ -35,7 +36,7 @@ const HELP_TEXT = `
     status               Inspect database connection and active security parameters
     benchmark            Run sub-millisecond wire-proxy latency benchmark
     badge <tool-name>    Generate "Secured by DBShield" verified sponsor badge markdown / SVG
-    upgrade [--tier]     Upgrade to Team ($29/mo) or Enterprise Hub ($99/mo) via Dodo Payments
+    upgrade [--tier]     View Team and Enterprise licensing & integration guide
     init                 Generate a default dbshield.config.json in the current directory
     install-claude       Automatically configure Claude Desktop to use DBShield
     install-cursor       Automatically configure Cursor (.cursor/mcp.json) to use DBShield
@@ -56,7 +57,7 @@ const HELP_TEXT = `
     --upstream-host <host>              Upstream PostgreSQL host (default: 127.0.0.1)
     --upstream-port <port>              Upstream PostgreSQL port (default: 5432)
     --metrics-port <number>             Prometheus metrics exporter port (default: 9090)
-    --metrics-host <host>               Prometheus metrics listen host (default: 0.0.0.0)
+    --metrics-host <host>               Prometheus metrics listen host (default: 127.0.0.1)
     --no-metrics                        Disable Prometheus metrics exporter
     --once                              Run monitor or check once without interactive loop
     --json                              Output results in JSON format
@@ -219,11 +220,22 @@ Security Score:    ${report.score}/100 [${report.passed ? "PASSED" : "FAILED"}]
 ───────────────────────────────────────────────
 Simulating 1,000 queries through DBShield AST Safety & PII Masking Pipeline...
 `);
+      const config = await loadConfig();
+      const guardEngine = new SqlGuardEngine(config);
       const start = performance.now();
       const count = 1000;
+      const testQueries = [
+        "SELECT id, email, ssn FROM users WHERE tenant_id = 42 LIMIT 10;",
+        "UPDATE accounts SET balance = balance - 100 WHERE id = 101;",
+        "SELECT order_id, customer_name, total FROM orders WHERE created_at > '2026-01-01' LIMIT 50;",
+        "INSERT INTO audit_logs (event, user_id) VALUES ('login', 123);",
+      ];
       for (let i = 0; i < count; i++) {
-        const q = "SELECT id, email, ssn FROM users WHERE tenant_id = 42 LIMIT 10;";
-        if (q.includes("DROP")) throw new Error();
+        const q = testQueries[i % testQueries.length];
+        const evalResult = guardEngine.evaluate(q);
+        if (!evalResult.allowed) {
+          throw new Error(`Benchmark query unexpectedly blocked: ${q}`);
+        }
       }
       const durationMs = performance.now() - start;
       const perQueryMs = (durationMs / count).toFixed(3);
@@ -276,18 +288,14 @@ HTML (for websites/docs):
       const tierArg = tierIdx !== -1 && args[tierIdx + 1] ? args[tierIdx + 1] : "team";
       const isHub = tierArg === "hub" || tierArg === "enterprise" || tierArg === "99";
       const planName = isHub
-        ? "DBShield Team + Shared Redis Governance ($99/mo)"
-        : "DBShield Team Approval Relay ($29/mo)";
-      const planPrice = isHub ? "$99/mo" : "$29/mo";
-      const checkoutUrl = isHub
-        ? "https://checkout.dodopayments.com/buy/pdt_0NrFSmrXT8zU2u5BKGJ7y?quantity=1&metadata_tier=dbshield_team_99&redirect_url=https%3A%2F%2Fritualdev.in%2Fpricing%2Fsuccess%2F%3Fproduct%3Ddbshield_team_99"
-        : "https://checkout.dodopayments.com/buy/pdt_0NpjONGugY5QkrFDUaPva?quantity=1&paymentAmount=29&amount=29&paymentCurrency=USD&currency=USD&metadata_tier=dbshield_team_29&redirect_url=https%3A%2F%2Fritualdev.in%2Fpricing%2Fsuccess%2F%3Fproduct%3Ddbshield_team_29";
+        ? "DBShield Team + Shared Redis Governance"
+        : "DBShield Team Approval Relay";
 
       console.log(`
-💳 DBShield Commercial Upgrade (Powered by Dodo Payments)
+🛡️ DBShield Enterprise Features & Documentation
 ─────────────────────────────────────────────────────────────
 Plan:        ${planName}
-Billing:     ${planPrice} (Tax deductible corporate invoice)
+Information: https://ritualdev.in/dbshield/enterprise
 
 Enterprise Features Included:
   ✅ Interactive Slack #db-approvals & Teams mutation webhook relay
@@ -295,9 +303,8 @@ Enterprise Features Included:
   ✅ SOC 2 Type II & ISO 27001 automated compliance evidence exports
   ✅ Multi-agent fleet central audit logging & tamper-evident ledger
 
-Merchant of Record: Dodo Payments (Global Tax, GST, VAT, Cards, UPI, Apple Pay)
-Direct Checkout:    ${checkoutUrl}
-Portal:             https://ritualdev.in/pricing
+Documentation & Plans: https://ritualdev.in/dbshield/enterprise
+Support & Inquiries:    support@ritualdev.in
 ─────────────────────────────────────────────────────────────
 `);
       process.exit(0);
@@ -347,7 +354,7 @@ Portal:             https://ritualdev.in/pricing
       const metricsHost =
         mHostIdx !== -1 && args[mHostIdx + 1]
           ? args[mHostIdx + 1]
-          : config.metricsHost || "0.0.0.0";
+          : config.metricsHost || "127.0.0.1";
 
       const enableMetrics = !args.includes("--no-metrics") && config.enableMetrics !== false;
 

@@ -74,7 +74,7 @@ export class DashboardServer {
     return this.listenPort;
   }
 
-  public async start(port?: number, host = "0.0.0.0"): Promise<void> {
+  public async start(port?: number, host = "127.0.0.1"): Promise<void> {
     const targetPort = port ?? this.listenPort;
 
     return new Promise((resolve, reject) => {
@@ -149,6 +149,18 @@ export class DashboardServer {
 
   private authenticateUser(req: http.IncomingMessage): { authenticated: boolean; user?: SsoUser } {
     if (!this.ssoAuthenticator || !this.ssoAuthenticator.isEnabled()) {
+      // Local developer mode: restrict unauthenticated admin approval actions strictly to loopback interface
+      const clientIp = req.socket.remoteAddress;
+      const isLoopback =
+        !clientIp ||
+        clientIp === "127.0.0.1" ||
+        clientIp === "::1" ||
+        clientIp === "::ffff:127.0.0.1";
+
+      if (!isLoopback) {
+        return { authenticated: false };
+      }
+
       return {
         authenticated: true,
         user: {

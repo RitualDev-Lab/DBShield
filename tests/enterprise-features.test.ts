@@ -33,7 +33,7 @@ test("Audit Scanner - Detects destructive DDL and unconstrained mutations", asyn
 
 test("Top Monitor - Returns healthy snapshot with active isolation and shadow tokens", () => {
   const snapshot = getTopMonitorSnapshot("BALANCED");
-  assert.equal(snapshot.version, "0.2.0");
+  assert.equal(snapshot.version, "0.2.1");
   assert.equal(snapshot.safetyTier, "BALANCED");
   assert.equal(snapshot.proxyListenPort, 5433);
   assert.ok(snapshot.activeSessions.length > 0);

@@ -91,7 +91,7 @@ test("MetricsServer - Exposes Prometheus /metrics and Kubernetes /healthz /ready
     port: 0,
     host: "127.0.0.1",
     registry: reg,
-    version: "0.2.0",
+    version: "0.2.1",
     proxyInfo: {
       listenPort: 5433,
       upstreamHost: "127.0.0.1",

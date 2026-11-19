@@ -87,7 +87,7 @@ export class PostgresWireProxy {
     this.verbose = options.verbose ?? false;
     this.enableMetrics = options.enableMetrics ?? this.config.enableMetrics ?? false;
     this.metricsPort = options.metricsPort ?? this.config.metricsPort ?? 9090;
-    this.metricsHost = options.metricsHost ?? this.config.metricsHost ?? "0.0.0.0";
+    this.metricsHost = options.metricsHost ?? this.config.metricsHost ?? "127.0.0.1";
     this.metricsRegistry = options.metricsRegistry || getGlobalMetrics();
     this.enableReadReplicaRouting =
       options.enableReadReplicaRouting ?? this.config.enableReadReplicaRouting ?? false;
