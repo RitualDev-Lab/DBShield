@@ -64,3 +64,20 @@ impl WirePiiMasker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::WirePiiMasker;
+
+    #[test]
+    fn pseudonymizes_email_and_phone_deterministically() {
+        let masker = WirePiiMasker::new("test-salt");
+        let masked_email = masker.pseudonymize("alice@acme.io", "EMAIL");
+        assert!(masked_email.starts_with("user_"));
+        assert!(masked_email.ends_with("@acme.io"));
+        assert_eq!(masked_email, masker.pseudonymize("alice@acme.io", "EMAIL"));
+
+        let masked_phone = masker.pseudonymize("+1 (555) 123-9876", "PHONE");
+        assert_eq!(masked_phone, "+***-***-9876");
+    }
+}
