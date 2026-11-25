@@ -6,8 +6,11 @@ authors = ["RitualDev Studio <engineering@ritualdev.in>"]
 description = "High-performance zero-GC wire protocol proxy engine, connection pooling, and virtual shadow database for DBShield."
 readme = "README.md"
 license = "MIT"
+homepage = "https://ritualdev.in/dbshield"
+documentation = "https://docs.rs/dbshield-core"
 repository = "https://github.com/RitualDev-Lab/DBShield"
 keywords = ["postgresql", "mysql", "wire-protocol", "shadow-database", "ai-agents"]
+categories = ["database", "development-tools", "network-programming"]
 
 [lib]
 name = "dbshield_core"
