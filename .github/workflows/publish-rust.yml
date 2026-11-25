@@ -1,0 +1,60 @@
+name: Rust Crate (dbshield-core) CI & Crates.io Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/dbshield-core/**"
+      - ".github/workflows/publish-rust.yml"
+    tags:
+      - "rust-v*"
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/dbshield-core/**"
+      - ".github/workflows/publish-rust.yml"
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  test-rust:
+    name: Test dbshield-core Crate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Cargo Tests & Package Check
+        working-directory: crates/dbshield-core
+        run: |
+          cargo test
+          cargo package --allow-dirty --list
+
+  publish-crate:
+    name: Publish dbshield-core to crates.io
+    needs: [test-rust]
+    if: startsWith(github.ref, 'refs/tags/rust-v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish Crate
+        working-directory: crates/dbshield-core
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "CARGO_REGISTRY_TOKEN secret not set; skipping crates.io upload."
+            exit 1
+          fi
+          cargo publish --token "$CARGO_REGISTRY_TOKEN"
