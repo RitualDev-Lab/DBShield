@@ -29,8 +29,32 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: Database",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+langchain = [
+    "langchain-core>=0.3.0"
+]
+crewai = [
+    "crewai>=0.80.0"
+]
+llamaindex = [
+    "llama-index-core>=0.11.0"
+]
+sqlalchemy = [
+    "sqlalchemy>=2.0.0"
+]
+all = [
+    "dbshield-defense[langchain,crewai,llamaindex,sqlalchemy]"
 ]
 
 [project.urls]
@@ -38,3 +62,6 @@ Homepage = "https://ritualdev.in/dbshield/"
 Repository = "https://github.com/RitualDev-Lab/DBShield"
 Issues = "https://github.com/RitualDev-Lab/DBShield/issues"
 Documentation = "https://ritualdev.in/dbshield/"
+
+[tool.setuptools.package-data]
+dbshield = ["py.typed"]
